@@ -32,7 +32,8 @@ import {
   Eye,
   ExternalLink,
   RefreshCw,
-  Printer
+  Printer,
+  Mail
 } from 'lucide-react';
 import { TrainingLog, Collaborator, TrainingModule } from '../types';
 import { ESCALES, ESCALE_COLORS, getEscaleStyle } from '../data/modulesData';
@@ -863,6 +864,99 @@ export default function CalendarView({
     setIsBulkModalOpen(false);
   };
 
+  // Handler: Send Order Email (Commande de formation) and set MAD EA = true automatically
+  const handleSendOrderEmail = () => {
+    if (!selectedSession) return;
+
+    // 1. Automatic database & local state update for MAD EA
+    const participantsList = selectedSession.participants || selectedSession.logs || [];
+    if (onBulkUpdateLogs && participantsList.length > 0) {
+      const updates = participantsList.map(log => ({
+        id: log.id,
+        changes: { madEa: true }
+      }));
+      onBulkUpdateLogs(updates);
+    }
+
+    // 2. Prepare variables for email
+    const trainerCollab = collaborators.find(c => 
+      c.id === selectedSession.idFormateur || 
+      c.matricule === selectedSession.idFormateur || 
+      (c.nom && selectedSession.formateur && `${c.nom} ${c.prenom}`.toLowerCase() === selectedSession.formateur.toLowerCase())
+    );
+    const trainerContact = trainerCollab?.email || selectedSession.idFormateur || selectedSession.formateur || 'N/A';
+
+    const dateDebutFormatted = formatDateFR(selectedSession.dateDebut);
+    const dateFinFormatted = formatDateFR(selectedSession.dateFin);
+
+    let detailsHoraires = '08:00 - 12:00';
+    if (selectedSession.heureDebut1 && selectedSession.heureFin1) {
+      detailsHoraires = `${selectedSession.heureDebut1} - ${selectedSession.heureFin1}`;
+      if (selectedSession.heureDebut2 && selectedSession.heureFin2) {
+        detailsHoraires += ` / ${selectedSession.heureDebut2} - ${selectedSession.heureFin2}`;
+      }
+    }
+
+    const participantRows = participantsList.map(log => {
+      const collab = collaborators.find(c => c.id === log.collaboratorId);
+      let nom = collab?.nom || '';
+      let prenom = collab?.prenom || '';
+      if (!nom && log.collaboratorName) {
+        const parts = log.collaboratorName.trim().split(' ');
+        nom = parts[0] || '';
+        prenom = parts.slice(1).join(' ') || '';
+      }
+      const matricule = collab?.matricule || 'N/A';
+      const escale = log.escale || selectedSession.escale || 'N/A';
+      const service = log.service || selectedSession.service || 'N/A';
+      return `${nom} | ${prenom} | ${matricule} | ${escale} | ${service}`;
+    }).join('\n');
+
+    const subject = `Commande de formation - ${selectedSession.moduleName} - ${dateDebutFormatted}`;
+
+    const body = `Bonjour à tous,
+
+Suite à la mise en place du process de mise à disposition des formateurs internes sous EA, veuillez trouver ci-dessous les détails de notre commande de formation.
+Merci de faire parvenir les dossiers complets de formation par mail à ${trainerContact}
+
+🚩 ${selectedSession.moduleName} - ${selectedSession.cycle || 'N/A'}
+📍 Lieu de la formation : ${selectedSession.lieu || 'N/A'}
+🎓 Nom du formateur : ${selectedSession.formateur || 'N/A'} - ${selectedSession.idFormateur || 'N/A'}
+📆 Date et heure : Du ${dateDebutFormatted} au ${dateFinFormatted} (${detailsHoraires})
+
+👥 Participants à la formation : 
+Nom | Prénom | Matricule | Escale | Service
+${participantRows || 'Aucun participant'}
+
+[ASSISTANTE RH] peux-tu faire une demande de mise à disposition sous EA stp ?
+[CHARGE DE RECRUTEMENT] peux-tu éditer un contrat de formation HBO pour les agents concernés svp ?
+
+Merci de facturer la formation pour les agents cités ci-dessus à : 
+TEMPO’AIR / HUBJOB Province
+106 avenue Tolosane
+31520 RAMONVILLE SAINT AGNE
+
+SIRET : 480 671 171 00019
+TVA : FR79 480671171
+
+Règlement par virements
+Mail : comptabilite@groupe3s.com
+05 34 66 71 80
+
+L'ensemble de l'équipe Hubjob et moi-même restons à votre entière disposition pour toutes informations supplémentaires.
+
+Martin ONILLON MINÉE – Coordinateur formation
+📧 martin@hubjob.fr / +33 788 552 663
+📧 aero@hubjob.fr`;
+
+    const toRecipients = "admin.assist@excellence-academy.fr; adminexac@excellence-academy.fr; aero@hubjob.fr";
+    const ccRecipients = "service_formationprovince@groupe3s.com";
+
+    const mailtoUrl = `mailto:${toRecipients}?cc=${encodeURIComponent(ccRecipients)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    window.location.href = mailtoUrl;
+  };
+
   // Month Title formatted in French
   const monthTitle = currentDate.toLocaleDateString('fr-FR', {
     month: 'long',
@@ -1216,7 +1310,7 @@ export default function CalendarView({
                     </h3>
                   </div>
 
-                  {/* Action Buttons (Émargement PDF, Action de masse, Modifier, Supprimer) */}
+                  {/* Action Buttons (Émargement PDF, E-mail Commande, Action de masse, Modifier, Supprimer) */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     
                     {/* Émargement PDF (Icon-only Button) */}
@@ -1232,6 +1326,17 @@ export default function CalendarView({
                       ) : (
                         <Printer className="h-4 w-4 stroke-[2.2]" />
                       )}
+                    </button>
+
+                    {/* Générateur d'E-mail Commande de Formation (Icon Enveloppe) */}
+                    <button
+                      type="button"
+                      onClick={handleSendOrderEmail}
+                      className="p-2 bg-amber-50 hover:bg-amber-600 text-amber-600 hover:text-white border border-amber-200 hover:border-amber-600 rounded-xl transition-all cursor-pointer shadow-2xs group flex items-center justify-center"
+                      title="Générer l'e-mail de commande de formation pour organisme et valider MAD EA"
+                      id="session-email-generator-btn"
+                    >
+                      <Mail className="h-4 w-4 stroke-[2.2]" />
                     </button>
 
                     {!isReadOnly && (
@@ -1356,12 +1461,19 @@ export default function CalendarView({
                   <div className="grid grid-cols-3 gap-2">
                     
                     {/* MAD EA */}
-                    <div className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                      selectedSession.madEa 
-                        ? 'bg-blue-50 border-blue-200 text-blue-900 shadow-2xs' 
-                        : 'bg-slate-100 border-slate-200 text-slate-400'
-                    }`}>
-                      <span>MAD EA</span>
+                    <div 
+                      onClick={handleSendOrderEmail}
+                      className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-between cursor-pointer transition-all hover:scale-[1.02] ${
+                        selectedSession.madEa 
+                          ? 'bg-blue-50 border-blue-200 text-blue-900 shadow-2xs' 
+                          : 'bg-slate-100 border-slate-200 text-slate-500 hover:border-blue-300'
+                      }`}
+                      title="Cliquer pour générer l'e-mail de commande et valider MAD EA"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Mail className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                        <span className="truncate">MAD EA</span>
+                      </div>
                       {selectedSession.madEa ? (
                         <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
                       ) : (
