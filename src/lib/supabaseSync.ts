@@ -197,21 +197,55 @@ export async function saveBulkToSupabase<T extends { id: string }>(
   onError?: (errMessage: string) => void
 ): Promise<boolean> {
   if (!items || items.length === 0) return true;
-  try {
-    const { error } = await supabase.from(tableName).upsert(items, { onConflict: 'id' });
-    if (error) {
-      console.error(`Supabase bulk save error on ${tableName}:`, error.message);
-      const msg = `Erreur d'enregistrement en masse Supabase (table '${tableName}'): ${error.message}`;
-      if (onError) onError(msg);
-      return false;
+
+  // Sanitize items: remove undefined values to prevent JSON serialization errors
+  const sanitizeItem = (item: any) => {
+    const clean: any = {};
+    Object.keys(item).forEach(key => {
+      if (item[key] !== undefined) {
+        clean[key] = item[key];
+      }
+    });
+    return clean;
+  };
+
+  const sanitizedItems = items.map(sanitizeItem);
+
+  // Batch in chunks of 50 items to avoid payload limits / timeouts
+  const CHUNK_SIZE = 50;
+  let allSuccessful = true;
+  let firstErrorMessage = '';
+
+  for (let i = 0; i < sanitizedItems.length; i += CHUNK_SIZE) {
+    const chunk = sanitizedItems.slice(i, i + CHUNK_SIZE);
+    try {
+      const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+      if (error) {
+        console.error(`[Supabase Error] Bulk save failed on '${tableName}' (chunk ${Math.floor(i / CHUNK_SIZE) + 1}/${Math.ceil(sanitizedItems.length / CHUNK_SIZE)}):`, {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        if (!firstErrorMessage) {
+          firstErrorMessage = `${error.message}${error.details ? ` (${error.details})` : ''}`;
+        }
+        allSuccessful = false;
+      }
+    } catch (err: any) {
+      console.error(`[Supabase Exception] Exception bulk saving to table '${tableName}':`, err);
+      if (!firstErrorMessage) {
+        firstErrorMessage = err?.message || String(err);
+      }
+      allSuccessful = false;
     }
-    return true;
-  } catch (err: any) {
-    console.error(`Exception bulk saving to Supabase ${tableName}:`, err);
-    const msg = `Exception réseau Supabase (table '${tableName}'): ${err?.message || String(err)}`;
-    if (onError) onError(msg);
-    return false;
   }
+
+  if (!allSuccessful && onError) {
+    onError(`Erreur d'enregistrement Supabase (table '${tableName}'): ${firstErrorMessage}`);
+  }
+
+  return allSuccessful;
 }
 
 /**

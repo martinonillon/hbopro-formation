@@ -399,26 +399,30 @@ function ZoneCard({
 
         {/* Alert / Main Status Banner */}
         {!state.isVerifying && state.alert && (
-          <div className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
-            state.alert.type === 'success'
-              ? 'bg-emerald-50 border-2 border-emerald-300 text-emerald-950 shadow-2xs'
-              : state.alert.type === 'warning'
-              ? 'bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-2xs'
-              : state.alert.type === 'error'
-              ? 'bg-rose-50 border-2 border-rose-300 text-rose-950 shadow-2xs'
-              : 'bg-slate-50 border border-slate-200 text-slate-900'
-          }`}>
-            <div className="shrink-0 mt-0.5">
-              {state.alert.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
-              {state.alert.type === 'warning' && <AlertTriangle className="h-5 w-5 text-amber-600" />}
-              {state.alert.type === 'error' && <AlertTriangle className="h-5 w-5 text-rose-600" />}
-              {state.alert.type === 'info' && <Info className="h-5 w-5 text-blue-600" />}
+          state.alert.message === DEFAULT_INFO_MESSAGE ? (
+            <ExtractionGuidePanel zoneTitle={title} />
+          ) : (
+            <div className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
+              state.alert.type === 'success'
+                ? 'bg-emerald-50 border-2 border-emerald-300 text-emerald-950 shadow-2xs'
+                : state.alert.type === 'warning'
+                ? 'bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-2xs'
+                : state.alert.type === 'error'
+                ? 'bg-rose-50 border-2 border-rose-300 text-rose-950 shadow-2xs'
+                : 'bg-slate-50 border border-slate-200 text-slate-900'
+            }`}>
+              <div className="shrink-0 mt-0.5">
+                {state.alert.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
+                {state.alert.type === 'warning' && <AlertTriangle className="h-5 w-5 text-amber-600" />}
+                {state.alert.type === 'error' && <AlertTriangle className="h-5 w-5 text-rose-600" />}
+                {state.alert.type === 'info' && <Info className="h-5 w-5 text-blue-600" />}
+              </div>
+              <div className="space-y-0.5 text-xs">
+                <h4 className="font-extrabold tracking-tight text-sm">{state.alert.title}</h4>
+                <p className="leading-relaxed font-medium whitespace-pre-line">{state.alert.message}</p>
+              </div>
             </div>
-            <div className="space-y-0.5 text-xs">
-              <h4 className="font-extrabold tracking-tight text-sm">{state.alert.title}</h4>
-              <p className="leading-relaxed font-medium whitespace-pre-line">{state.alert.message}</p>
-            </div>
-          </div>
+          )
         )}
 
         {/* Detailed Warnings / Messages List */}
@@ -562,6 +566,98 @@ function ZoneCard({
 
       </div>
 
+    </div>
+  );
+}
+
+// Helper component to display clean extraction instructions
+function ExtractionGuidePanel({ zoneTitle }: { zoneTitle: string }) {
+  return (
+    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2.5">
+      <div className="flex items-center gap-2">
+        <Info className="h-4 w-4 text-blue-600 shrink-0" />
+        <span className="font-extrabold text-slate-800 text-xs tracking-tight">
+          Pour extraire les données ({zoneTitle}) :
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5">
+        {/* Fichiers contrats */}
+        <div className="bg-white rounded-lg p-2.5 border border-slate-200/80 shadow-2xs space-y-1.5">
+          <p className="font-extrabold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            Fichiers contrats :
+          </p>
+          <ul className="space-y-0.5 text-[11px] text-slate-600 font-medium pl-1">
+            <li className="flex items-start gap-1.5">
+              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+              <span>depuis <strong className="text-slate-800 font-semibold">HBO v2</strong></span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+              <span><strong className="text-slate-800 font-semibold">Extractions</strong></span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+              <span><strong className="text-slate-800 font-semibold">Contrats</strong></span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+              <span>date de début/fin</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+              <span className="text-blue-700 font-semibold">Exporter les contrats (CSV)</span>
+            </li>
+          </ul>
+        </div>
+
+        {/* Fichiers planning */}
+        <div className="bg-white rounded-lg p-2.5 border border-slate-200/80 shadow-2xs space-y-1.5">
+          <p className="font-extrabold text-slate-800 text-[11px] flex items-center gap-1.5 border-b border-slate-100 pb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+            Fichiers planning :
+          </p>
+          <ul className="space-y-0.5 text-[11px] text-slate-600 font-medium pl-1">
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>depuis <strong className="text-slate-800 font-semibold">Planete</strong></span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span><strong className="text-slate-800 font-semibold">Planning</strong></span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>date de début/fin</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>sélectionner tout le monde</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>lancer la sélection</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>menu</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>impression</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>planning</span>
+            </li>
+            <li className="flex items-start gap-1.5">
+              <span className="text-indigo-500 font-bold shrink-0">&gt;</span>
+              <span>tache par client <span className="text-slate-400 text-[10px] font-normal">(tous - planning réel - regrouper par salle - trier par nom - excel - cocher toutes les cases)</span></span>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }

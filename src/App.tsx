@@ -985,14 +985,20 @@ export default function App() {
         }
 
         if (mode === 'replace') {
+          await clearSupabaseTable('modules_catalog', handleSupabaseWriteError);
+          await clearFirestoreCollection('modules_catalog');
           setModulesCatalog(newModules);
         } else {
           setModulesCatalog(prev => [...prev, ...newModules]);
         }
         saveBulkToFirestore('modules_catalog', newModules);
-        saveBulkToSupabase('modules_catalog', newModules, handleSupabaseWriteError);
+        const supaOk = await saveBulkToSupabase('modules_catalog', newModules, handleSupabaseWriteError);
         addEvent(`Référentiel mis à jour (${mode === 'replace' ? 'Remplacement' : 'Ajout'}) : ${newModules.length} modules traités.`, 'success');
-        return { success: true, message: `Félicitations ! Votre catalogue a été mis à jour avec ${newModules.length} modules (${mode === 'replace' ? 'Remplacé' : 'Ajouté'}).`, count: newModules.length };
+        return { 
+          success: true, 
+          message: `Félicitations ! Votre catalogue a été mis à jour dans Supabase avec ${newModules.length} modules (${mode === 'replace' ? 'Remplacé' : 'Ajouté'})${!supaOk ? ' [Attention: Avertissement Supabase, voir la console]' : ''}.`, 
+          count: newModules.length 
+        };
       } 
       
       else if (type === 'agents') {
@@ -1040,9 +1046,13 @@ export default function App() {
           setCollaborators(prev => [...prev, ...newCollabs]);
         }
         saveBulkToFirestore('collaborators', newCollabs);
-        saveBulkToSupabase('collaborators', newCollabs, handleSupabaseWriteError);
+        const supaOk = await saveBulkToSupabase('collaborators', newCollabs, handleSupabaseWriteError);
         addEvent(`Base agents mise à jour (${mode === 'replace' ? 'Remplacement' : 'Ajout'}) : ${newCollabs.length} collaborateurs traités.`, 'success');
-        return { success: true, message: `Félicitations ! Base agents mise à jour avec ${newCollabs.length} agents (${mode === 'replace' ? 'Remplacé' : 'Ajouté'}).`, count: newCollabs.length };
+        return { 
+          success: true, 
+          message: `Félicitations ! Base agents mise à jour dans Supabase avec ${newCollabs.length} agents (${mode === 'replace' ? 'Remplacé' : 'Ajouté'})${!supaOk ? ' [Attention: Avertissement Supabase, voir la console]' : ''}.`, 
+          count: newCollabs.length 
+        };
       }
 
       else if (type === 'history') {
@@ -1117,6 +1127,8 @@ export default function App() {
         };
 
         const newLogs: TrainingLog[] = [];
+        const missingCollabsMap = new Map<string, Collaborator>();
+
         for (let i = 1; i < lines.length; i++) {
           const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.replace(/^"|"$/g, '').trim());
           if (row.length < 1) continue;
@@ -1147,7 +1159,23 @@ export default function App() {
             c.lastName.toLowerCase() === lName.toLowerCase() ||
             `${c.firstName} ${c.lastName}`.toLowerCase() === fullName.toLowerCase()
           );
-          const collabId = collab ? collab.id : 'c-imported-history-' + i;
+
+          let collabId = collab ? collab.id : undefined;
+          if (!collabId) {
+            collabId = 'c-imported-history-' + i + '-' + Math.random().toString(36).substr(2, 5);
+            const missingCollab: Collaborator = {
+              id: collabId,
+              firstName: fName || fullName,
+              lastName: lName || fullName,
+              email: `${(fName || 'agent').toLowerCase().replace(/[^a-z0-9]/g, '')}.${(lName || 'imported').toLowerCase().replace(/[^a-z0-9]/g, '')}@hubjob.fr`,
+              escale: escaleIdx !== -1 && row[escaleIdx] ? row[escaleIdx] : 'BOD',
+              service: serviceIdx !== -1 && row[serviceIdx] ? row[serviceIdx] : 'PISTE',
+              hireDate: new Date().toISOString().split('T')[0],
+              matricule: '',
+              phone: ''
+            };
+            missingCollabsMap.set(collabId, missingCollab);
+          }
 
           const rawDateDebut = dateDebutIdx !== -1 ? row[dateDebutIdx] : undefined;
           const rawDateFin = dateFinIdx !== -1 ? row[dateFinIdx] : undefined;
@@ -1216,15 +1244,42 @@ export default function App() {
           return { success: false, message: "Aucune ligne d'historique valide n'a pu être lue." };
         }
 
+        // 1. If any new collaborators were dynamically created during history import, insert them into Supabase first
+        if (missingCollabsMap.size > 0) {
+          const missingCollabsList = Array.from(missingCollabsMap.values());
+          setCollaborators(prev => [...prev, ...missingCollabsList]);
+          saveBulkToFirestore('collaborators', missingCollabsList);
+          await saveBulkToSupabase('collaborators', missingCollabsList, handleSupabaseWriteError);
+        }
+
+        // 2. Perform replace vs append for training_logs in Supabase & Firestore
         if (mode === 'replace') {
+          await clearSupabaseTable('training_logs', handleSupabaseWriteError);
+          await clearFirestoreCollection('training_logs');
           setTrainingLogs(newLogs);
         } else {
           setTrainingLogs(prev => [...prev, ...newLogs]);
         }
+
+        // 3. Save logs to Firestore and Supabase (AWAITED!)
         saveBulkToFirestore('training_logs', newLogs);
-        saveBulkToSupabase('training_logs', newLogs, handleSupabaseWriteError);
-        addEvent(`Historique de formation mis à jour (${mode === 'replace' ? 'Remplacement' : 'Ajout'}) : ${newLogs.length} suivis.`, 'success');
-        return { success: true, message: `Félicitations ! L'historique de suivi a été mis à jour avec ${newLogs.length} dossiers (${mode === 'replace' ? 'Remplacé' : 'Ajouté'}).`, count: newLogs.length };
+        const supaSuccess = await saveBulkToSupabase('training_logs', newLogs, handleSupabaseWriteError);
+
+        if (!supaSuccess) {
+          console.error("[Import Error] Supabase a retourné une erreur lors de l'enregistrement du registre historique:", newLogs);
+          addEvent(`⚠️ Problème lors de la sauvegarde Supabase de l'historique de formation (${newLogs.length} enregistrements).`, 'error');
+          return {
+            success: false,
+            message: `L'import local a fonctionné (${newLogs.length} dossiers), mais la sauvegarde Supabase a échoué. Vérifiez votre connexion Supabase et les contraintes de table dans la console.`
+          };
+        }
+
+        addEvent(`Historique de formation mis à jour dans Supabase (${mode === 'replace' ? 'Remplacement' : 'Ajout'}) : ${newLogs.length} suivis.`, 'success');
+        return { 
+          success: true, 
+          message: `Félicitations ! L'historique de suivi de formation (${newLogs.length} dossiers) a été enregistré et conservé avec succès dans Supabase (${mode === 'replace' ? 'Remplacé' : 'Ajouté'}).`, 
+          count: newLogs.length 
+        };
       }
 
       return { success: false, message: "Type d'import inconnu." };
