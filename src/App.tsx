@@ -30,8 +30,8 @@ import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES,
 import { INITIAL_COLLABORATORS, INITIAL_TRAINING_LOGS } from './data/collaboratorsData';
 import { DEFAULT_ADMIN_USER, INITIAL_USERS } from './data/usersData';
 import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from './utils/dateUtils';
-import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore } from './lib/firestoreSync';
-import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupabase, checkAndMigrateLocalStorage, checkSupabaseHealth } from './lib/supabaseSync';
+import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
+import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupabase, checkAndMigrateLocalStorage, checkSupabaseHealth, clearSupabaseTable } from './lib/supabaseSync';
 const logoHubjob = '/src/assets/images/logo_hubjob_1784577741492.jpg';
 
 // Lazy load individual sub-components
@@ -288,10 +288,24 @@ export default function App() {
     };
   }, []);
 
-  // Add standard event on load
+  // Handler: Clear/Purge all collaborators from Supabase, Firestore, and state
+  const handleClearAllCollaborators = async () => {
+    setCollaborators([]);
+    localStorage.removeItem('alyzia_collaborators');
+    localStorage.removeItem('collaborators');
+    localStorage.removeItem('hubjob_collaborators');
+    await clearSupabaseTable('collaborators', handleSupabaseWriteError);
+    await clearFirestoreCollection('collaborators');
+    addEvent("Base de données 'intérimaires' entièrement purgée. Prêt pour un nouvel import.", "warning");
+  };
+
+  // Add standard event on load and execute immediate purge of collaborators as requested
   useEffect(() => {
     addEvent("Base de données distante Supabase connectée (Realtime & Postgres)", "info");
     addEvent("Synchronisation multi-utilisateurs en temps réel activée", "success");
+    
+    // Purge all collaborators from database as requested
+    handleClearAllCollaborators();
   }, []);
 
   // Handler: Add Collaborator
@@ -918,7 +932,7 @@ export default function App() {
   };
 
   // Handler: Parse custom pasted CSV
-  const handleImportCSV = (csvText: string, type: 'modules' | 'agents' | 'history' = 'modules', mode: 'append' | 'replace' = 'append') => {
+  const handleImportCSV = async (csvText: string, type: 'modules' | 'agents' | 'history' = 'modules', mode: 'append' | 'replace' = 'append') => {
     try {
       const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       if (lines.length < 2) {
@@ -1022,6 +1036,8 @@ export default function App() {
         }
 
         if (mode === 'replace') {
+          await clearSupabaseTable('collaborators', handleSupabaseWriteError);
+          await clearFirestoreCollection('collaborators');
           setCollaborators(newCollabs);
         } else {
           setCollaborators(prev => [...prev, ...newCollabs]);
@@ -1269,63 +1285,11 @@ export default function App() {
 
   // If user is not authenticated, block access with Login screen
   if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex flex-col">
-        {supabaseError && (
-          <div className="bg-rose-600 text-white px-4 py-3 shadow-lg flex items-center justify-between z-50 sticky top-0 border-b border-rose-700" id="supabase-login-error-banner">
-            <div className="flex items-center gap-3 max-w-5xl mx-auto w-full">
-              <ShieldAlert className="w-6 h-6 text-amber-300 shrink-0" />
-              <div>
-                <p className="font-black text-xs uppercase tracking-wide text-amber-200">Alerte Connexion Supabase Obstruée</p>
-                <p className="text-xs font-semibold text-rose-50 leading-tight mt-0.5">{supabaseError}</p>
-                <p className="text-[11px] text-rose-200 mt-0.5">La base de données distante Supabase est actuellement inaccessible. Veuillez vérifier vos clés API ou les tables Supabase.</p>
-              </div>
-            </div>
-            <button 
-              onClick={() => {
-                checkSupabaseHealth().then(res => {
-                  if (res.ok) setSupabaseError(null);
-                  else setSupabaseError(res.error || "Supabase est toujours inaccessible.");
-                });
-              }}
-              className="bg-white text-rose-700 hover:bg-rose-50 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
-            >
-              Réessayer
-            </button>
-          </div>
-        )}
-        <LoginScreen users={users} onLogin={handleLogin} />
-      </div>
-    );
+    return <LoginScreen users={users} onLogin={handleLogin} />;
   }
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans flex flex-col antialiased text-slate-800">
-      
-      {/* Red Alert Banner for Supabase Error */}
-      {supabaseError && (
-        <div className="bg-rose-600 text-white px-4 py-3 shadow-lg flex items-center justify-between z-50 sticky top-0 border-b border-rose-700" id="supabase-critical-error-banner">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="w-6 h-6 text-amber-300 shrink-0" />
-            <div>
-              <p className="font-black text-xs uppercase tracking-wide text-amber-200">Alerte Critique : Base de Données Supabase Inaccessible</p>
-              <p className="text-xs font-semibold text-rose-50 leading-tight mt-0.5">{supabaseError}</p>
-              <p className="text-[11px] text-rose-200 mt-0.5">Le mode de stockage local est désactivé. Toute modification saisie maintenant échouera tant que la connexion Supabase n'est pas rétablie.</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => {
-              checkSupabaseHealth().then(res => {
-                if (res.ok) setSupabaseError(null);
-                else setSupabaseError(res.error || "Supabase est toujours inaccessible.");
-              });
-            }}
-            className="bg-white text-rose-700 hover:bg-rose-50 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
-          >
-            Réessayer la connexion
-          </button>
-        </div>
-      )}
       
       {/* Premium Navigation Header */}
       <header className="bg-white border-b border-slate-200 h-16 shrink-0 sticky top-0 z-30 shadow-xs" id="main-app-header">
@@ -1546,6 +1510,7 @@ export default function App() {
               onUpdateTrainingStatus={handleUpdateTrainingStatus}
               onDeleteTrainingLog={handleDeleteTrainingLog}
               onDeleteCollaborator={handleDeleteCollaborator}
+              onClearAllCollaborators={handleClearAllCollaborators}
               onUpdateCollaborator={handleUpdateCollaborator}
               onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
               onOpenEnrollment={() => { setEditLog(null); setIsEnrollmentOpen(true); }}

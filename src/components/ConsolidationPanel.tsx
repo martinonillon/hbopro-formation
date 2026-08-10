@@ -28,7 +28,7 @@ interface ConsolidationPanelProps {
     csvText: string, 
     type: 'modules' | 'agents' | 'history', 
     mode: 'append' | 'replace'
-  ) => { success: boolean; message: string; count?: number };
+  ) => Promise<{ success: boolean; message: string; count?: number }> | { success: boolean; message: string; count?: number };
   modulesCatalog?: TrainingModule[];
   collaborators?: Collaborator[];
   trainingLogs?: TrainingLog[];
@@ -276,8 +276,8 @@ export default function ConsolidationPanel({
     }
   };
 
-  const executeImport = (modeToUse: ImportMode) => {
-    const result = onImportCSV(csvInput, importType, modeToUse);
+  const executeImport = async (modeToUse: ImportMode) => {
+    const result = await onImportCSV(csvInput, importType, modeToUse);
     setImportResult(result);
     if (result.success) {
       setCsvInput('');

@@ -41,6 +41,7 @@ interface CollaboratorsListProps {
   onUpdateTrainingStatus: (logId: string, updates: Partial<TrainingLog>) => void;
   onDeleteTrainingLog: (logId: string) => void;
   onDeleteCollaborator: (collabId: string) => void;
+  onClearAllCollaborators?: () => void;
   onUpdateCollaborator?: (collab: Collaborator) => void;
   onEditLog?: (log: TrainingLog) => void;
   onOpenEnrollment?: () => void;
@@ -58,6 +59,7 @@ export default function CollaboratorsList({
   onUpdateTrainingStatus,
   onDeleteTrainingLog,
   onDeleteCollaborator,
+  onClearAllCollaborators,
   onUpdateCollaborator,
   onEditLog,
   onOpenEnrollment,
@@ -169,6 +171,7 @@ export default function CollaboratorsList({
   // Delete States
   const [confirmDeleteLogId, setConfirmDeleteLogId] = useState<string | null>(null);
   const [confirmDeleteCollabId, setConfirmDeleteCollabId] = useState<string | null>(null);
+  const [isConfirmClearAllOpen, setIsConfirmClearAllOpen] = useState(false);
   const [historyLog, setHistoryLog] = useState<TrainingLog | null>(null);
 
   // Dynamically extract all unique formateurs from catalog + history logs + static list
@@ -957,14 +960,26 @@ export default function CollaboratorsList({
           <div className="flex justify-between items-center">
             <h3 className="font-semibold text-slate-900 text-sm">Collaborateurs ({filteredCollabs.length})</h3>
             {!isReadOnly && (
-              <button
-                onClick={() => setIsNewCollabOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all"
-                id="add-collab-btn"
-                title="Ajouter un collaborateur"
-              >
-                <UserPlus className="h-3.5 w-3.5" /> Nouveau
-              </button>
+              <div className="flex items-center gap-1.5">
+                {onClearAllCollaborators && (
+                  <button
+                    onClick={() => setIsConfirmClearAllOpen(true)}
+                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all border border-rose-200 cursor-pointer"
+                    id="clear-all-collabs-btn"
+                    title="Vider toute la base de données des intérimaires"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Vider la base
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsNewCollabOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                  id="add-collab-btn"
+                  title="Ajouter un collaborateur"
+                >
+                  <UserPlus className="h-3.5 w-3.5" /> Nouveau
+                </button>
+              </div>
             )}
           </div>
 
@@ -2298,6 +2313,42 @@ export default function CollaboratorsList({
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg transition-all cursor-pointer"
               >
                 Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Clearing All Collaborators */}
+      {isConfirmClearAllOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="clear-all-collabs-modal">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-full">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Vider toute la base "Intérimaires" ?</h3>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Êtes-vous sûr de vouloir supprimer tous les intérimaires de la base de données ? Cette action effacera définitivement l'ensemble des fiches agents (Supabase & Firestore).
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setIsConfirmClearAllOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  if (onClearAllCollaborators) {
+                    onClearAllCollaborators();
+                  }
+                  setIsConfirmClearAllOpen(false);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-xs cursor-pointer"
+              >
+                Oui, tout supprimer
               </button>
             </div>
           </div>

@@ -74,6 +74,26 @@ export async function deleteItemFromFirestore(
 }
 
 /**
+ * Clears/Deletes all items from a Firestore collection
+ */
+export async function clearFirestoreCollection(
+  collectionName: string
+): Promise<void> {
+  try {
+    const colRef = collection(db, collectionName);
+    const snapshot = await getDocs(colRef);
+    if (snapshot.empty) return;
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((docSnap) => {
+      batch.delete(docSnap.ref);
+    });
+    await batch.commit();
+  } catch (err) {
+    console.error(`Error clearing Firestore collection ${collectionName}:`, err);
+  }
+}
+
+/**
  * Saves a whole list of items to Firestore (e.g. bulk import)
  */
 export async function saveBulkToFirestore<T extends { id: string }>(

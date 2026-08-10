@@ -140,6 +140,30 @@ export async function saveToSupabase<T extends { id: string }>(
 }
 
 /**
+ * Clears/Deletes all items from a Supabase table
+ */
+export async function clearSupabaseTable(
+  tableName: string,
+  onError?: (errMessage: string) => void
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from(tableName).delete().not('id', 'is', null);
+    if (error) {
+      console.error(`Supabase clear error on ${tableName}:`, error.message);
+      const msg = `Erreur de vidage Supabase (table '${tableName}'): ${error.message}`;
+      if (onError) onError(msg);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error(`Exception clearing Supabase table ${tableName}:`, err);
+    const msg = `Exception réseau Supabase (table '${tableName}'): ${err?.message || String(err)}`;
+    if (onError) onError(msg);
+    return false;
+  }
+}
+
+/**
  * Deletes an item from a Supabase table by ID
  */
 export async function deleteFromSupabase(
