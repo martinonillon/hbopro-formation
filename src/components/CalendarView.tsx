@@ -72,6 +72,7 @@ export interface CalendarSession {
   convoc: boolean;
   notes: string;
   logs: TrainingLog[];
+  participants?: TrainingLog[];
   durationHours: number;
   emrgFileUrl?: string;
   emrgFileName?: string;
@@ -158,6 +159,34 @@ export default function CalendarView({
   const customLogo = useMemo(() => {
     return localStorage.getItem('app_custom_logo') || '/src/assets/images/logo_hubjob_1784577741492.jpg';
   }, []);
+
+  // Helper to calculate list of distinct training dates for a session
+  const getTrainingDaysList = (dateDebut?: string, dateFin?: string): string[] => {
+    if (!dateDebut) return [new Date().toISOString().split('T')[0]];
+    if (!dateFin || dateFin === dateDebut) return [dateDebut];
+
+    const days: string[] = [];
+    const start = new Date(`${dateDebut}T00:00:00`);
+    const end = new Date(`${dateFin}T00:00:00`);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+      return [dateDebut];
+    }
+
+    const curr = new Date(start);
+    let count = 0;
+    while (curr <= end && count < 30) {
+      const yyyy = curr.getFullYear();
+      const mm = String(curr.getMonth() + 1).padStart(2, '0');
+      const dd = String(curr.getDate()).padStart(2, '0');
+      days.push(`${yyyy}-${mm}-${dd}`);
+
+      curr.setDate(curr.getDate() + 1);
+      count++;
+    }
+
+    return days.length > 0 ? days : [dateDebut];
+  };
 
   const modernColorToRgbStr = (cssText: string): string => {
     if (!cssText || typeof cssText !== 'string') return cssText;
@@ -265,120 +294,8 @@ export default function CalendarView({
     if (!selectedSession) return;
     setIsExportingEmargementPdf(true);
     try {
-      const container = document.getElementById('emargement-pdf-export-container');
-      if (!container) {
-        alert("Impossible de trouver le conteneur du document d'émargement.");
-        return;
-      }
+      const daysList = getTrainingDaysList(selectedSession.dateDebut, selectedSession.dateFin);
 
-      // Convert image sources inside container to data URLs if needed to prevent canvas tainting
-      const imgElements = Array.from(container.querySelectorAll('img'));
-      for (const img of imgElements) {
-        if (img.src && !img.src.startsWith('data:')) {
-          try {
-            const res = await fetch(img.src);
-            const blob = await res.blob();
-            const dataUrl = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-            img.src = dataUrl;
-          } catch (e) {
-            console.warn("Could not convert image to base64 data URL:", e);
-          }
-        }
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#FFFFFF',
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: 1200,
-        windowHeight: 900,
-        onclone: (clonedDoc) => {
-          // 1. Position cloned container cleanly at (0,0) inside the cloned document
-          const clonedContainer = clonedDoc.getElementById('emargement-pdf-export-container');
-          if (clonedContainer) {
-            clonedContainer.style.position = 'absolute';
-            clonedContainer.style.top = '0px';
-            clonedContainer.style.left = '0px';
-            clonedContainer.style.margin = '0px';
-            clonedContainer.style.zIndex = '999999';
-            clonedContainer.style.transform = 'none';
-          }
-
-          // 2. Sanitize all <style> tags in cloned document to convert any oklch(...) and oklab(...)
-          const styleEls = Array.from(clonedDoc.querySelectorAll('style'));
-          styleEls.forEach((styleEl) => {
-            if (styleEl.textContent && (styleEl.textContent.toLowerCase().includes('oklch') || styleEl.textContent.toLowerCase().includes('oklab'))) {
-              styleEl.textContent = modernColorToRgbStr(styleEl.textContent);
-            }
-          });
-
-          // 3. Sanitize styleSheets rules in cloned document if accessible
-          try {
-            Array.from(clonedDoc.styleSheets).forEach((sheet) => {
-              try {
-                const rules = Array.from(sheet.cssRules || []);
-                rules.forEach((rule) => {
-                  if (rule.cssText && (rule.cssText.toLowerCase().includes('oklch') || rule.cssText.toLowerCase().includes('oklab'))) {
-                    if (rule instanceof CSSStyleRule) {
-                      rule.style.cssText = modernColorToRgbStr(rule.style.cssText);
-                    }
-                  }
-                });
-              } catch {
-                // Ignore cross-origin stylesheet access restriction
-              }
-            });
-          } catch {
-            // Ignore stylesheet iteration error
-          }
-
-          // 4. Convert inline and computed styles for elements inside export container
-          if (clonedContainer) {
-            const elements = [clonedContainer, ...Array.from(clonedContainer.querySelectorAll('*'))];
-            const view = clonedDoc.defaultView || window;
-            elements.forEach((el) => {
-              const htmlEl = el as HTMLElement;
-              if (htmlEl.style && htmlEl.style.cssText && (htmlEl.style.cssText.toLowerCase().includes('oklch') || htmlEl.style.cssText.toLowerCase().includes('oklab'))) {
-                htmlEl.style.cssText = modernColorToRgbStr(htmlEl.style.cssText);
-              }
-              const computed = view.getComputedStyle(htmlEl);
-              if (computed) {
-                const colorProps = [
-                  'color',
-                  'background-color',
-                  'border-color',
-                  'border-top-color',
-                  'border-right-color',
-                  'border-bottom-color',
-                  'border-left-color',
-                  'outline-color',
-                  'box-shadow',
-                  'fill',
-                  'stroke'
-                ];
-                colorProps.forEach((prop) => {
-                  const val = computed.getPropertyValue(prop);
-                  if (val && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
-                    htmlEl.style.setProperty(prop, modernColorToRgbStr(val), 'important');
-                  }
-                });
-              }
-            });
-          }
-        }
-      });
-
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
@@ -388,13 +305,99 @@ export default function CalendarView({
       const pdfWidth = 297;
       const pdfHeight = 210;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      for (let i = 0; i < daysList.length; i++) {
+        const container = document.getElementById(`emargement-pdf-export-container-day-${i}`);
+        if (!container) {
+          console.warn(`Conteneur émargement pour le jour ${i+1} introuvable.`);
+          continue;
+        }
+
+        // Convert image sources inside container to data URLs if needed
+        const imgElements = Array.from(container.querySelectorAll('img'));
+        for (const img of imgElements) {
+          if (img.src && !img.src.startsWith('data:')) {
+            try {
+              const res = await fetch(img.src);
+              const blob = await res.blob();
+              const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+              img.src = dataUrl;
+            } catch (e) {
+              console.warn("Could not convert image to base64 data URL:", e);
+            }
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        const canvas = await html2canvas(container, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#FFFFFF',
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: 1200,
+          windowHeight: 900,
+          onclone: (clonedDoc) => {
+            const clonedContainer = clonedDoc.getElementById(`emargement-pdf-export-container-day-${i}`);
+            if (clonedContainer) {
+              clonedContainer.style.position = 'absolute';
+              clonedContainer.style.top = '0px';
+              clonedContainer.style.left = '0px';
+              clonedContainer.style.margin = '0px';
+              clonedContainer.style.zIndex = '999999';
+              clonedContainer.style.transform = 'none';
+            }
+
+            const styleEls = Array.from(clonedDoc.querySelectorAll('style'));
+            styleEls.forEach((styleEl) => {
+              if (styleEl.textContent && (styleEl.textContent.toLowerCase().includes('oklch') || styleEl.textContent.toLowerCase().includes('oklab'))) {
+                styleEl.textContent = modernColorToRgbStr(styleEl.textContent);
+              }
+            });
+
+            if (clonedContainer) {
+              const elements = [clonedContainer, ...Array.from(clonedContainer.querySelectorAll('*'))];
+              const view = clonedDoc.defaultView || window;
+              elements.forEach((el) => {
+                const htmlEl = el as HTMLElement;
+                if (htmlEl.style && htmlEl.style.cssText && (htmlEl.style.cssText.toLowerCase().includes('oklch') || htmlEl.style.cssText.toLowerCase().includes('oklab'))) {
+                  htmlEl.style.cssText = modernColorToRgbStr(htmlEl.style.cssText);
+                }
+                const computed = view.getComputedStyle(htmlEl);
+                if (computed) {
+                  const colorProps = [
+                    'color', 'background-color', 'border-color', 'border-top-color',
+                    'border-right-color', 'border-bottom-color', 'border-left-color',
+                    'outline-color', 'box-shadow', 'fill', 'stroke'
+                  ];
+                  colorProps.forEach((prop) => {
+                    const val = computed.getPropertyValue(prop);
+                    if (val && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
+                      htmlEl.style.setProperty(prop, modernColorToRgbStr(val), 'important');
+                    }
+                  });
+                }
+              });
+            }
+          }
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        if (i > 0) {
+          pdf.addPage('a4', 'landscape');
+        }
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      }
+
       const fileName = `Emargement_Session_${selectedSession.numSession}_${selectedSession.dateDebut || 'export'}.pdf`;
-      
-      // Save locally
       pdf.save(fileName);
 
-      // Upload to Supabase Storage for remote sharing
       try {
         const pdfBlob = pdf.output('blob');
         const remoteUrl = await uploadPdfToSupabaseStorage(fileName, pdfBlob);
@@ -607,6 +610,7 @@ export default function CalendarView({
           convoc: !!log.convoc,
           notes: log.cleanNotes || log.notes || '',
           logs: [log],
+          participants: [log],
           durationHours,
           emrgFileUrl: log.emrgFileUrl,
           emrgFileName: log.emrgFileName
@@ -614,6 +618,7 @@ export default function CalendarView({
       } else {
         const session = map.get(groupKey)!;
         session.logs.push(log);
+        session.participants = session.logs;
         if (log.madEa) session.madEa = true;
         if (log.cttHbo) session.cttHbo = true;
         if (log.convoc) session.convoc = true;
@@ -647,9 +652,15 @@ export default function CalendarView({
 
   // Selected Session object
   const selectedSession = useMemo(() => {
-    if (!selectedSessionKey) return filteredSessions[0] || sessions[0] || null;
-    return sessions.find(s => s.key === selectedSessionKey) || filteredSessions[0] || null;
-  }, [selectedSessionKey, sessions, filteredSessions]);
+    if (!selectedSessionKey) return null;
+    let match = sessions.find(s => s.key === selectedSessionKey);
+    if (match) return match;
+    match = sessions.find(s => s.numSession === selectedSessionKey);
+    if (match) return match;
+    match = sessions.find(s => s.logs.some(l => l.id === selectedSessionKey));
+    if (match) return match;
+    return null;
+  }, [selectedSessionKey, sessions]);
 
   // Calendar Days calculation
   const year = currentDate.getFullYear();
@@ -705,6 +716,15 @@ export default function CalendarView({
 
     return grid;
   }, [year, month, daysInMonth, firstDayOfWeek]);
+
+  // Weeks grouping for multi-day continuous session rendering
+  const weeks = useMemo(() => {
+    const result: (typeof calendarGrid)[] = [];
+    for (let i = 0; i < calendarGrid.length; i += 7) {
+      result.push(calendarGrid.slice(i, i + 7));
+    }
+    return result;
+  }, [calendarGrid]);
 
   // Navigate months
   const handlePrevMonth = () => {
@@ -1003,101 +1023,143 @@ export default function CalendarView({
             <div className="text-slate-400">Dim</div>
           </div>
 
-          {/* Calendar Grid Cells */}
-          <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-150 bg-slate-50/30">
-            {calendarGrid.map((slot, idx) => {
-              // Find sessions occurring on slot.dateStr
-              const slotSessions = filteredSessions.filter(s => {
+          {/* Calendar Grid Weeks */}
+          <div className="flex flex-col divide-y divide-slate-200 bg-slate-50/30">
+            {weeks.map((week, weekIdx) => {
+              const weekStartStr = week[0].dateStr;
+              const weekEndStr = week[6].dateStr;
+
+              const weekSessions = filteredSessions.filter(s => {
                 const sStart = s.dateDebut || s.dateFin;
                 const sEnd = s.dateFin || s.dateDebut;
-                return slot.dateStr >= sStart && slot.dateStr <= sEnd;
+                return sStart <= weekEndStr && sEnd >= weekStartStr;
               });
 
-              const isToday = slot.dateStr === todayStr;
-
               return (
-                <div
-                  key={slot.dateStr + '_' + idx}
-                  className={`min-h-[110px] h-auto p-1.5 transition-all flex flex-col justify-between group relative ${
-                    slot.isCurrentMonth ? 'bg-white' : 'bg-slate-50/50 opacity-60'
-                  } ${isToday ? 'ring-2 ring-inset ring-[#06b6d4] bg-cyan-50/20' : ''}`}
-                >
-                  {/* Top Bar inside cell: Day number + Add button */}
-                  <div className="flex items-center justify-between mb-1">
-                    <span
-                      className={`text-xs font-extrabold w-6 h-6 flex items-center justify-center rounded-full ${
-                        isToday 
-                          ? 'bg-[#06b6d4] text-white shadow-xs' 
-                          : slot.isCurrentMonth 
-                          ? 'text-slate-800' 
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {slot.dayNum}
-                    </span>
-
-                    {/* Quick Add Session Button on Hover */}
-                    {!isReadOnly && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDayClick(slot.dateStr);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-[10px] bg-slate-100 hover:bg-[#0062FF] hover:text-white text-slate-600 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-0.5"
-                        title="Créer une session ce jour"
-                      >
-                        <Plus className="h-3 w-3" />
-                        <span className="hidden sm:inline">Session</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Badges Container */}
-                  <div className="space-y-1 my-0.5 flex-1">
-                    {slotSessions.map(session => {
-                      const solidStyle = getSolidEscaleClass(session.escale);
-                      const isSelected = selectedSession?.key === session.key;
-
+                <div key={`week-${weekIdx}`} className="relative border-b border-slate-200/80 last:border-b-0 min-h-[115px] flex flex-col">
+                  {/* Background grid cells */}
+                  <div className="grid grid-cols-7 divide-x divide-slate-150 absolute inset-0 h-full pointer-events-none">
+                    {week.map((slot) => {
+                      const isToday = slot.dateStr === todayStr;
                       return (
                         <div
-                          key={session.key}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedSessionKey(session.key);
-                          }}
-                          className={`${solidStyle.bg} ${solidStyle.text} p-1 rounded-md text-left shadow-2xs hover:shadow-md transition-all cursor-pointer border ${solidStyle.border} ${
-                            isSelected ? 'ring-2 ring-slate-900 ring-offset-1 scale-[1.02]' : 'hover:scale-[1.01]'
-                          }`}
+                          key={slot.dateStr}
+                          className={`h-full p-1.5 flex flex-col justify-between ${
+                            slot.isCurrentMonth ? 'bg-white' : 'bg-slate-50/50 opacity-60'
+                          } ${isToday ? 'ring-2 ring-inset ring-[#06b6d4] bg-cyan-50/20' : ''}`}
                         >
-                          <div className="flex items-center justify-between gap-1 leading-none">
-                            <span className="font-mono font-black text-[8.5px] tracking-tight bg-black/20 px-1 py-0.5 rounded shrink-0">
-                              {session.numSession}
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`text-xs font-extrabold w-6 h-6 flex items-center justify-center rounded-full ${
+                                isToday
+                                  ? 'bg-[#06b6d4] text-white shadow-xs'
+                                  : slot.isCurrentMonth
+                                  ? 'text-slate-800'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              {slot.dayNum}
                             </span>
-                            <span className="font-extrabold text-[8px] uppercase px-1 py-0.2 bg-white/20 rounded">
-                              {session.escale}
-                            </span>
-                          </div>
-
-                          <div className="font-bold text-[8.5px] truncate mt-0.5 leading-tight text-white/95">
-                            {session.moduleName}
                           </div>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Empty cell hover indicator */}
-                  {slotSessions.length === 0 && !isReadOnly && (
-                    <div 
-                      onClick={() => handleDayClick(slot.dateStr)}
-                      className="flex-1 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md">
-                        + Ajouter session
-                      </span>
+                  {/* Foreground overlay */}
+                  <div className="relative z-10 p-1 flex-1 flex flex-col justify-between">
+                    {/* Header click bar per day cell */}
+                    <div className="grid grid-cols-7 gap-1 h-6 pointer-events-auto">
+                      {week.map((slot) => (
+                        <div
+                          key={`click-${slot.dateStr}`}
+                          onClick={() => handleDayClick(slot.dateStr)}
+                          className="h-full cursor-pointer flex items-center justify-end px-1 group"
+                          title={`Créer une session le ${formatDateFR(slot.dateStr)}`}
+                        >
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDayClick(slot.dateStr);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-[9px] bg-slate-100 hover:bg-[#0062FF] hover:text-white text-slate-600 font-bold px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-0.5"
+                            >
+                              <Plus className="h-2.5 w-2.5" />
+                              <span className="hidden sm:inline">Session</span>
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  )}
 
+                    {/* Sessions Spanning Grid */}
+                    <div className="grid grid-cols-7 gap-x-1 gap-y-1.5 my-1 pointer-events-auto">
+                      {weekSessions.map((session) => {
+                        const sStart = session.dateDebut || session.dateFin;
+                        const sEnd = session.dateFin || session.dateDebut;
+
+                        let startIndex = week.findIndex(s => s.dateStr === sStart);
+                        if (startIndex === -1) startIndex = 0;
+
+                        let endIndex = week.findIndex(s => s.dateStr === sEnd);
+                        if (endIndex === -1) endIndex = 6;
+
+                        const isMultiDay = sStart !== sEnd;
+                        const startsBeforeWeek = sStart < weekStartStr;
+                        const endsAfterWeek = sEnd > weekEndStr;
+
+                        const solidStyle = getSolidEscaleClass(session.escale);
+                        const isSelected = selectedSession?.key === session.key;
+
+                        return (
+                          <div
+                            key={`${session.key}_w${weekIdx}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSessionKey(session.key);
+                            }}
+                            style={{
+                              gridColumnStart: startIndex + 1,
+                              gridColumnEnd: endIndex + 2
+                            }}
+                            className={`${solidStyle.bg} ${solidStyle.text} p-1.5 transition-all cursor-pointer border ${solidStyle.border} shadow-2xs hover:shadow-md ${
+                              isSelected ? 'ring-2 ring-slate-900 ring-offset-1 scale-[1.01] z-20' : 'hover:scale-[1.005] z-10'
+                            } ${
+                              isMultiDay
+                                ? `${startsBeforeWeek ? 'rounded-l-none border-l-0' : 'rounded-l-lg'} ${
+                                    endsAfterWeek ? 'rounded-r-none border-r-0' : 'rounded-r-lg'
+                                  }`
+                                : 'rounded-lg'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 leading-none">
+                              <div className="flex items-center gap-1 min-w-0">
+                                {startsBeforeWeek && <span className="text-[10px] font-black opacity-80">‹</span>}
+                                <span className="font-mono font-black text-[9px] tracking-tight bg-black/25 px-1.5 py-0.5 rounded shrink-0">
+                                  {session.numSession}
+                                </span>
+                                <span className="font-extrabold text-[8.5px] uppercase px-1.5 py-0.5 bg-white/20 rounded shrink-0">
+                                  {session.escale}
+                                </span>
+                                {isMultiDay && (
+                                  <span className="text-[8.5px] font-semibold opacity-90 truncate hidden sm:inline">
+                                    ({formatDateFR(session.dateDebut)} → {formatDateFR(session.dateFin)})
+                                  </span>
+                                )}
+                              </div>
+                              {endsAfterWeek && <span className="text-[10px] font-black opacity-80">›</span>}
+                            </div>
+
+                            <div className="font-bold text-[9px] truncate mt-0.5 leading-tight text-white/95">
+                              {session.moduleName}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -1433,66 +1495,61 @@ export default function CalendarView({
               </div>
 
               {/* Participants List */}
-              <div className="p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-slate-700" />
-                    <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
-                      Participants Inscrits ({selectedSession.logs.length})
-                    </h4>
-                  </div>
+              {(() => {
+                const participantsList = selectedSession.participants || selectedSession.logs || [];
+                return (
+                  <div className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-slate-700" />
+                        <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">
+                          Participants Inscrits ({participantsList.length})
+                        </h4>
+                      </div>
+                    </div>
 
-                  {!isReadOnly && (
-                    <button
-                      onClick={() => onOpenEnrollmentOnDate(selectedSession.dateDebut, selectedSession.numSession)}
-                      className="text-[11px] text-[#0062FF] hover:underline font-bold cursor-pointer"
-                    >
-                      + Ajouter agent
-                    </button>
-                  )}
-                </div>
-
-                {/* Table of Participants */}
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-100/70 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        <th className="py-2 px-2.5">Matricule</th>
-                        <th className="py-2 px-2.5">Agent</th>
-                        <th className="py-2 px-2.5">Escale</th>
-                        <th className="py-2 px-2.5">Service</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-150">
-                      {selectedSession.logs.map((log) => {
-                        const collab = collaborators.find(c => c.id === log.collaboratorId);
-                        const matricule = collab?.matricule || 'N/A';
-                        const escaleStyle = getEscaleStyle(log.escale);
-
-                        return (
-                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-2 px-2.5 font-mono text-[10px] font-bold text-slate-600">
-                              {matricule}
-                            </td>
-                            <td className="py-2 px-2.5 font-bold text-slate-900">
-                              {log.collaboratorName}
-                            </td>
-                            <td className="py-2 px-2.5">
-                              <span className={`${escaleStyle.bg} ${escaleStyle.text} text-[10px] font-bold px-1.5 py-0.5 rounded border ${escaleStyle.border}`}>
-                                {log.escale}
-                              </span>
-                            </td>
-                            <td className="py-2 px-2.5 text-[10px] font-semibold text-slate-600">
-                              {log.service}
-                            </td>
+                    {/* Table of Participants */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-100/70 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            <th className="py-2 px-2.5">Matricule</th>
+                            <th className="py-2 px-2.5">Agent</th>
+                            <th className="py-2 px-2.5">Escale</th>
+                            <th className="py-2 px-2.5">Service</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-150">
+                          {participantsList.map((log) => {
+                            const collab = collaborators.find(c => c.id === log.collaboratorId);
+                            const matricule = collab?.matricule || 'N/A';
+                            const escaleStyle = getEscaleStyle(log.escale);
 
-              </div>
+                            return (
+                              <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="py-2 px-2.5 font-mono text-[10px] font-bold text-slate-600">
+                                  {matricule}
+                                </td>
+                                <td className="py-2 px-2.5 font-bold text-slate-900">
+                                  {log.collaboratorName}
+                                </td>
+                                <td className="py-2 px-2.5">
+                                  <span className={`${escaleStyle.bg} ${escaleStyle.text} text-[10px] font-bold px-1.5 py-0.5 rounded border ${escaleStyle.border}`}>
+                                    {log.escale}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2.5 text-[10px] font-semibold text-slate-600">
+                                  {log.service}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
           ) : (
@@ -2158,212 +2215,220 @@ export default function CalendarView({
         </div>
       )}
 
-      {/* Hidden Printable Container for Landscape A4 Émargement PDF */}
-      {selectedSession && (
-        <div 
-          id="emargement-pdf-export-container"
-          className="fixed top-0 left-[-9999px] w-[1120px] bg-white text-slate-900 p-6 font-sans border border-slate-200"
-          style={{ minHeight: '792px', maxHeight: '792px', boxSizing: 'border-box' }}
-        >
-          {/* 1. Header with Logo & Title */}
-          <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3 mb-3">
-            <div className="flex items-center gap-4">
-              {customLogo ? (
-                <img 
-                  src={customLogo} 
-                  alt="Logo Hubjob" 
-                  className="h-12 max-w-[200px] object-contain"
-                />
-              ) : (
-                <div className="bg-[#082C66] text-[#ffde59] px-3.5 py-1.5 rounded-lg font-black text-lg tracking-wider">
-                  HUBJOB
+      {/* Hidden Printable Container for Landscape A4 Émargement PDF (Multi-page / Per day support) */}
+      {selectedSession && (() => {
+        const daysList = getTrainingDaysList(selectedSession);
+
+        return daysList.map((dayStr, dIdx) => (
+          <div 
+            key={`emrg-print-day-${dayStr}-${dIdx}`}
+            id={`emargement-pdf-export-container-day-${dIdx}`}
+            className="fixed top-0 left-[-9999px] w-[1120px] bg-white text-slate-900 p-6 font-sans border border-slate-200"
+            style={{ minHeight: '792px', maxHeight: '792px', boxSizing: 'border-box' }}
+          >
+            {/* 1. Header with Logo & Title */}
+            <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3 mb-3">
+              <div className="flex items-center gap-4">
+                {customLogo ? (
+                  <img 
+                    src={customLogo} 
+                    alt="Logo Hubjob" 
+                    className="h-12 max-w-[200px] object-contain"
+                  />
+                ) : (
+                  <div className="bg-[#082C66] text-[#ffde59] px-3.5 py-1.5 rounded-lg font-black text-lg tracking-wider">
+                    HUBJOB
+                  </div>
+                )}
+                <div>
+                  <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                    Émargement de Formation
+                  </h1>
+                  {daysList.length > 1 && (
+                    <span className="inline-block bg-sky-100 text-sky-900 text-[11px] font-black px-2 py-0.5 rounded mt-0.5">
+                      Jour {dIdx + 1} / {daysList.length} — {formatDateFR(dayStr)}
+                    </span>
+                  )}
                 </div>
-              )}
-              <div>
-                <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">
-                  Émargement de Formation
-                </h1>
+              </div>
+              <div className="text-right border-l-2 border-slate-300 pl-4">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block tracking-wider">Session Ref</span>
+                <span className="font-mono text-sm font-bold text-slate-900 block mt-0.5">
+                  {selectedSession.numSession}
+                  {(() => {
+                    const mod = modulesCatalog.find(m => m.name === selectedSession.moduleName);
+                    return mod?.code ? ` — ${mod.code}` : '';
+                  })()}
+                </span>
               </div>
             </div>
-            <div className="text-right border-l-2 border-slate-300 pl-4">
-              <span className="text-[10px] font-bold text-slate-500 uppercase block tracking-wider">Session Ref</span>
-              <span className="font-mono text-sm font-bold text-slate-900 block mt-0.5">
-                {selectedSession.numSession}
+
+            {/* 2. Session Summary Grid */}
+            <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 mb-3 text-xs">
+              <div className="grid grid-cols-4 gap-x-4 gap-y-2.5">
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">N° de Session :</span>
+                  <span className="font-bold text-slate-900 font-mono text-xs whitespace-normal break-words block">{selectedSession.numSession}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Module :</span>
+                  <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.moduleName}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Cycle / Type :</span>
+                  <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.cycle} — {selectedSession.type}</span>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Date du jour :</span>
+                  <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">
+                    {formatDateFR(dayStr)}
+                    {daysList.length > 1 && ` (Jour ${dIdx + 1}/${daysList.length})`}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Horaires :</span>
+                  <span className="font-mono font-bold text-slate-900 text-xs whitespace-normal break-words block">
+                    {selectedSession.heureDebut1 ? `${selectedSession.heureDebut1} - ${selectedSession.heureFin1}` : '08:00 - 12:00'}
+                    {selectedSession.heureDebut2 ? ` / ${selectedSession.heureDebut2} - ${selectedSession.heureFin2}` : ''}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Durée globale :</span>
+                  <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.durationHours} Heures</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Formateur :</span>
+                  <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.formateur}</span>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">ID Formateur :</span>
+                  <span className="font-mono font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.idFormateur || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Escale & Service :</span>
+                  <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.escale} ({selectedSession.service})</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Lieu / Salle :</span>
+                  <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.lieu || 'Non spécifié'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Table of Enrolled Agents (12 Rows) */}
+            <div className="mb-3">
+              <table className="w-full text-left border-collapse border border-slate-400 text-xs">
+                <thead>
+                  <tr className="bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider">
+                    <th className="p-1.5 border border-slate-400 w-1/3">Nom & Prénom de l'Agent</th>
+                    <th className="p-1.5 border border-slate-400 w-1/4 text-center">Signature Matin</th>
+                    <th className="p-1.5 border border-slate-400 w-1/4 text-center">Signature Après-Midi</th>
+                    <th className="p-1.5 border border-slate-400 text-center w-[70px]">Absence</th>
+                    <th className="p-1.5 border border-slate-400 w-1/6">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const rows = [...selectedSession.logs];
+                    const filledRows = Array.from({ length: 12 }, (_, i) => rows[i] || null);
+                    
+                    return filledRows.map((log, index) => {
+                      let agentMatricule = '';
+                      if (log) {
+                        const colab = collaborators.find(c => 
+                          c.id === log.collaboratorId || 
+                          `${c.lastName} ${c.firstName}`.toLowerCase() === log.collaboratorName?.toLowerCase() ||
+                          `${c.firstName} ${c.lastName}`.toLowerCase() === log.collaboratorName?.toLowerCase()
+                        );
+                        agentMatricule = colab?.matricule || log.service || '';
+                      }
+
+                      return (
+                        <tr key={log ? log.id : `empty-row-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                          <td className="px-2 py-1 border border-slate-300 font-bold text-slate-900 h-7 text-xs">
+                            {log ? (
+                              <div className="flex items-center justify-between gap-2">
+                                <span>{log.collaboratorName}</span>
+                                {agentMatricule && (
+                                  <span className="text-[10px] font-mono text-slate-700 font-bold">({agentMatricule})</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 italic font-normal text-xs">•</span>
+                            )}
+                          </td>
+                          <td className="p-1 border border-slate-300 h-7 text-center">
+                            {/* Box Signature Matin */}
+                          </td>
+                          <td className="p-1 border border-slate-300 h-7 text-center">
+                            {/* Box Signature Après-midi */}
+                          </td>
+                          <td className="p-1 border border-slate-300 text-center">
+                            <div className="w-3.5 h-3.5 border border-slate-400 rounded-xs mx-auto"></div>
+                          </td>
+                          <td className="px-1.5 py-1 border border-slate-300 text-slate-600 text-[10px]">
+                            {log?.notes ? log.notes : ''}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 4. Formateur Signature Row Below Table */}
+            <div className="border border-slate-400 bg-slate-100 py-2 px-3 rounded-md mb-3 flex items-center justify-between text-xs">
+              <div className="font-extrabold text-slate-900 uppercase text-[11px] flex items-center gap-2">
+                <span>Signature du Formateur :</span>
+                <span className="font-bold text-slate-900">{selectedSession.formateur}</span>
+                {selectedSession.idFormateur && (
+                  <span className="font-bold text-slate-600 font-mono text-[11px]">({selectedSession.idFormateur})</span>
+                )}
+              </div>
+              <div className="flex items-center gap-6 pr-6">
+                <div className="border border-slate-400 bg-white w-44 h-10 rounded flex items-end justify-center pb-1 text-[9px] text-slate-400 font-semibold">
+                  Visa & Signature Matin
+                </div>
+                <div className="border border-slate-400 bg-white w-44 h-10 rounded flex items-end justify-center pb-1 text-[9px] text-slate-400 font-semibold">
+                  Visa & Signature Après-midi
+                </div>
+              </div>
+            </div>
+
+            {/* 5. Free Comment Section */}
+            <div className="border border-slate-300 rounded-md p-2.5 bg-white">
+              <span className="font-bold text-slate-700 text-[10px] uppercase block mb-1">
+                Commentaires libres / Observations du formateur :
+              </span>
+              <div className="h-10 border-b border-dashed border-slate-300 relative">
+                <div className="absolute inset-0 flex flex-col justify-between opacity-30 pointer-events-none">
+                  <div className="border-b border-slate-200 w-full h-1/2"></div>
+                  <div className="border-b border-slate-200 w-full h-1/2"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* 6. Footer Notice */}
+            <div className="mt-2 pt-2 border-t border-slate-300 flex items-center justify-between text-[10px] text-slate-700 font-bold">
+              <span className="uppercase tracking-wider">HUBJOB</span>
+              <span>
                 {(() => {
-                  const mod = modulesCatalog.find(m => m.name === selectedSession.moduleName);
-                  return mod?.code ? ` — ${mod.code}` : '';
+                  const now = new Date();
+                  const day = String(now.getDate()).padStart(2, '0');
+                  const month = String(now.getMonth() + 1).padStart(2, '0');
+                  const year = now.getFullYear();
+                  const hours = String(now.getHours()).padStart(2, '0');
+                  const minutes = String(now.getMinutes()).padStart(2, '0');
+                  return `Édité le ${day}/${month}/${year} à ${hours}:${minutes}`;
                 })()}
               </span>
             </div>
           </div>
-
-          {/* 2. Session Summary Grid */}
-          <div className="bg-slate-50 border border-slate-300 rounded-lg p-3 mb-3 text-xs">
-            <div className="grid grid-cols-4 gap-x-4 gap-y-2.5">
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">N° de Session :</span>
-                <span className="font-bold text-slate-900 font-mono text-xs whitespace-normal break-words block">{selectedSession.numSession}</span>
-              </div>
-              <div className="col-span-2">
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Module :</span>
-                <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.moduleName}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Cycle / Type :</span>
-                <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.cycle} — {selectedSession.type}</span>
-              </div>
-
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Date(s) :</span>
-                <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">
-                  {selectedSession.dateDebut === selectedSession.dateFin 
-                    ? formatDateFR(selectedSession.dateDebut) 
-                    : `Du ${formatDateFR(selectedSession.dateDebut)} au ${formatDateFR(selectedSession.dateFin)}`
-                  }
-                </span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Horaires :</span>
-                <span className="font-mono font-bold text-slate-900 text-xs whitespace-normal break-words block">
-                  {selectedSession.heureDebut1 ? `${selectedSession.heureDebut1} - ${selectedSession.heureFin1}` : '08:00 - 12:00'}
-                  {selectedSession.heureDebut2 ? ` / ${selectedSession.heureDebut2} - ${selectedSession.heureFin2}` : ''}
-                </span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Durée globale :</span>
-                <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.durationHours} Heures</span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Formateur :</span>
-                <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.formateur}</span>
-              </div>
-
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">ID Formateur :</span>
-                <span className="font-mono font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.idFormateur || 'N/A'}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Escale & Service :</span>
-                <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.escale} ({selectedSession.service})</span>
-              </div>
-              <div className="col-span-2">
-                <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Lieu / Salle :</span>
-                <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">{selectedSession.lieu || 'Non spécifié'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Table of Enrolled Agents (12 Rows) */}
-          <div className="mb-3">
-            <table className="w-full text-left border-collapse border border-slate-400 text-xs">
-              <thead>
-                <tr className="bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider">
-                  <th className="p-1.5 border border-slate-400 w-1/3">Nom & Prénom de l'Agent</th>
-                  <th className="p-1.5 border border-slate-400 w-1/4 text-center">Signature Matin</th>
-                  <th className="p-1.5 border border-slate-400 w-1/4 text-center">Signature Après-Midi</th>
-                  <th className="p-1.5 border border-slate-400 text-center w-[70px]">Absence</th>
-                  <th className="p-1.5 border border-slate-400 w-1/6">Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const rows = [...selectedSession.logs];
-                  const filledRows = Array.from({ length: 12 }, (_, i) => rows[i] || null);
-                  
-                  return filledRows.map((log, index) => {
-                    let agentMatricule = '';
-                    if (log) {
-                      const colab = collaborators.find(c => 
-                        c.id === log.collaboratorId || 
-                        `${c.lastName} ${c.firstName}`.toLowerCase() === log.collaboratorName?.toLowerCase() ||
-                        `${c.firstName} ${c.lastName}`.toLowerCase() === log.collaboratorName?.toLowerCase()
-                      );
-                      agentMatricule = colab?.matricule || log.service || '';
-                    }
-
-                    return (
-                      <tr key={log ? log.id : `empty-row-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                        <td className="px-2 py-1 border border-slate-300 font-bold text-slate-900 h-7 text-xs">
-                          {log ? (
-                            <div className="flex items-center justify-between gap-2">
-                              <span>{log.collaboratorName}</span>
-                              {agentMatricule && (
-                                <span className="text-[10px] font-mono text-slate-700 font-bold">({agentMatricule})</span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 italic font-normal text-xs">•</span>
-                          )}
-                        </td>
-                        <td className="p-1 border border-slate-300 h-7 text-center">
-                          {/* Box Signature Matin */}
-                        </td>
-                        <td className="p-1 border border-slate-300 h-7 text-center">
-                          {/* Box Signature Après-midi */}
-                        </td>
-                        <td className="p-1 border border-slate-300 text-center">
-                          <div className="w-3.5 h-3.5 border border-slate-400 rounded-xs mx-auto"></div>
-                        </td>
-                        <td className="px-1.5 py-1 border border-slate-300 text-slate-600 text-[10px]">
-                          {log?.notes ? log.notes : ''}
-                        </td>
-                      </tr>
-                    );
-                  });
-                })()}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 4. Formateur Signature Row Below Table */}
-          <div className="border border-slate-400 bg-slate-100 py-2 px-3 rounded-md mb-3 flex items-center justify-between text-xs">
-            <div className="font-extrabold text-slate-900 uppercase text-[11px] flex items-center gap-2">
-              <span>Signature du Formateur :</span>
-              <span className="font-bold text-slate-900">{selectedSession.formateur}</span>
-              {selectedSession.idFormateur && (
-                <span className="font-bold text-slate-600 font-mono text-[11px]">({selectedSession.idFormateur})</span>
-              )}
-            </div>
-            <div className="flex items-center gap-6 pr-6">
-              <div className="border border-slate-400 bg-white w-44 h-10 rounded flex items-end justify-center pb-1 text-[9px] text-slate-400 font-semibold">
-                Visa & Signature Matin
-              </div>
-              <div className="border border-slate-400 bg-white w-44 h-10 rounded flex items-end justify-center pb-1 text-[9px] text-slate-400 font-semibold">
-                Visa & Signature Après-midi
-              </div>
-            </div>
-          </div>
-
-          {/* 5. Free Comment Section */}
-          <div className="border border-slate-300 rounded-md p-2.5 bg-white">
-            <span className="font-bold text-slate-700 text-[10px] uppercase block mb-1">
-              Commentaires libres / Observations du formateur :
-            </span>
-            <div className="h-10 border-b border-dashed border-slate-300 relative">
-              <div className="absolute inset-0 flex flex-col justify-between opacity-30 pointer-events-none">
-                <div className="border-b border-slate-200 w-full h-1/2"></div>
-                <div className="border-b border-slate-200 w-full h-1/2"></div>
-              </div>
-            </div>
-          </div>
-
-          {/* 6. Footer Notice */}
-          <div className="mt-2 pt-2 border-t border-slate-300 flex items-center justify-between text-[10px] text-slate-700 font-bold">
-            <span className="uppercase tracking-wider">HUBJOB</span>
-            <span>
-              {(() => {
-                const now = new Date();
-                const day = String(now.getDate()).padStart(2, '0');
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const year = now.getFullYear();
-                const hours = String(now.getHours()).padStart(2, '0');
-                const minutes = String(now.getMinutes()).padStart(2, '0');
-                return `Édité le ${day}/${month}/${year} à ${hours}:${minutes}`;
-              })()}
-            </span>
-          </div>
-        </div>
-      )}
+        ));
+      })()}
 
     </div>
   );

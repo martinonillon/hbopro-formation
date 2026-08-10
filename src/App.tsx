@@ -32,7 +32,7 @@ import { DEFAULT_ADMIN_USER, INITIAL_USERS } from './data/usersData';
 import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from './utils/dateUtils';
 import { deduplicateTrainingLogs } from './utils/deduplicateLogs';
 import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
-import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupabase, checkAndMigrateLocalStorage, checkSupabaseHealth, clearSupabaseTable } from './lib/supabaseSync';
+import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupabase, checkAndMigrateLocalStorage, checkSupabaseHealth, clearSupabaseTable, fetchSessionDetails, fetchAllTrainingLogsFromSupabase } from './lib/supabaseSync';
 const logoHubjob = '/src/assets/images/logo_hubjob_1784577741492.jpg';
 
 // Lazy load individual sub-components
@@ -568,7 +568,19 @@ export default function App() {
     if (newLogs.length > 0) {
       setTrainingLogs(prev => [...newLogs, ...prev]);
       saveBulkToFirestore('training_logs', newLogs);
-      saveBulkToSupabase('training_logs', newLogs, handleSupabaseWriteError);
+      saveBulkToSupabase('training_logs', newLogs, handleSupabaseWriteError).then(async (ok) => {
+        if (ok) {
+          const sessionNumToRefetch = computedSessionNum;
+          const freshSessionLogs = await fetchSessionDetails(sessionNumToRefetch);
+          if (freshSessionLogs && freshSessionLogs.length > 0) {
+            setTrainingLogs(prev => {
+              const freshIds = new Set(freshSessionLogs.map((l: any) => l.id));
+              const otherLogs = prev.filter(l => l.numSession !== sessionNumToRefetch && !freshIds.has(l.id));
+              return [...otherLogs, ...freshSessionLogs];
+            });
+          }
+        }
+      });
       addEvent(`Inscription groupée de ${newLogs.length} intérimaire(s) au module "${data.moduleName}" réussie`, 'success');
     }
   };
@@ -848,7 +860,31 @@ export default function App() {
 
     if (logsToSave.length > 0) {
       saveBulkToFirestore('training_logs', logsToSave);
-      saveBulkToSupabase('training_logs', logsToSave, handleSupabaseWriteError);
+      saveBulkToSupabase('training_logs', logsToSave, handleSupabaseWriteError).then(async (ok) => {
+        if (ok) {
+          const sessionNumToRefetch = data.numSession || logsToSave[0]?.numSession;
+          if (sessionNumToRefetch) {
+            const freshSessionLogs = await fetchSessionDetails(sessionNumToRefetch);
+            if (freshSessionLogs && freshSessionLogs.length > 0) {
+              setTrainingLogs(prev => {
+                const freshIds = new Set(freshSessionLogs.map((l: any) => l.id));
+                const otherLogs = prev.filter(l => l.numSession !== sessionNumToRefetch && !freshIds.has(l.id));
+                return [...otherLogs, ...freshSessionLogs];
+              });
+            } else {
+              const freshLogs = await fetchAllTrainingLogsFromSupabase();
+              if (freshLogs && freshLogs.length > 0) {
+                setTrainingLogs(freshLogs);
+              }
+            }
+          } else {
+            const freshLogs = await fetchAllTrainingLogsFromSupabase();
+            if (freshLogs && freshLogs.length > 0) {
+              setTrainingLogs(freshLogs);
+            }
+          }
+        }
+      });
     }
     addEvent(`Session de formation mise à jour avec succès pour l'ensemble des participants`, 'success');
   };

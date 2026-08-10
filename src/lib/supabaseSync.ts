@@ -631,3 +631,53 @@ export async function uploadPdfToSupabaseStorage(
   }
 }
 
+/**
+ * Fetches session details directly from Supabase for a given session number or log ID.
+ */
+export async function fetchSessionDetails(sessionId: string): Promise<any[]> {
+  try {
+    const { data, error } = await supabase.from('training_logs').select('*');
+    if (error || !data) return [];
+
+    const allLogs = data.map((item: any) => {
+      if (item && item.data && typeof item.data === 'object' && Object.keys(item.data).length > 0) {
+        return { id: item.id, ...item.data };
+      }
+      return item;
+    }).filter(Boolean);
+
+    const sessionLogs = allLogs.filter((log: any) => 
+      log.numSession === sessionId ||
+      log.num_session === sessionId ||
+      log.id === sessionId
+    );
+
+    return sessionLogs;
+  } catch (err) {
+    console.error(`Error in fetchSessionDetails for session ${sessionId}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Fetches all training logs directly from Supabase.
+ */
+export async function fetchAllTrainingLogsFromSupabase(): Promise<any[]> {
+  try {
+    const { data, error } = await supabase.from('training_logs').select('*');
+    if (error || !data) return [];
+
+    const logs = data.map((item: any) => {
+      if (item && item.data && typeof item.data === 'object' && Object.keys(item.data).length > 0) {
+        return { id: item.id, ...item.data };
+      }
+      return item;
+    }).filter(Boolean);
+
+    return logs;
+  } catch (err) {
+    console.error('Error in fetchAllTrainingLogsFromSupabase:', err);
+    return [];
+  }
+}
+
