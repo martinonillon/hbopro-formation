@@ -30,19 +30,6 @@ interface ZoneState {
   hasRun: boolean;
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1] || result;
-      resolve(base64);
-    };
-    reader.onerror = error => reject(error);
-    reader.readAsDataURL(file);
-  });
-}
-
 const DEFAULT_INFO_MESSAGE = `Fichiers contrats : depuis HBO v2 > Extractions > Contrats > date de début/fin > Exporter les contrats (CSV)
 Fichiers planning : depuis Planete > Planning > date de début/fin > sélectionner tout le monde > lancer la sélection > menu > impression > planning > tache par client (tous - planning réel - regrouper par salle - trier par nom - excel - cocher toutes les cases)`;
 
@@ -120,7 +107,7 @@ export default function CoverageControl() {
     });
   };
 
-  // Helper to trigger verification via backend endpoint (with client-side fallback)
+  // Helper to trigger verification purely on client-side (100% Vercel & static host compatible)
   const handleVerify = async (zone: 'province' | 'orly') => {
     const state = zone === 'province' ? provinceState : orlyState;
     const setState = zone === 'province' ? setProvinceState : setOrlyState;
@@ -133,94 +120,49 @@ export default function CoverageControl() {
       alert: {
         type: 'info',
         title: `Analyse en cours (${zone.toUpperCase()})`,
-        message: `Transmission et vérification de la couverture en cours pour la zone ${zone.toUpperCase()}...`
+        message: `Analyse et vérification de la couverture en cours pour la zone ${zone.toUpperCase()}...`
       }
     }));
 
     try {
-      const contractsBase64 = await fileToBase64(state.contractsFile);
-      const planningBase64 = await fileToBase64(state.planningFile);
+      const contractsArrayBuf = await state.contractsFile.arrayBuffer();
+      const planningArrayBuf = await state.planningFile.arrayBuffer();
+      
+      const { controleCouvertureOrly, controleCouvertureProvince } = await import('../services/coverageControlService');
+      const func = zone === 'province' ? controleCouvertureProvince : controleCouvertureOrly;
+      const clientResult = func(new Uint8Array(contractsArrayBuf), new Uint8Array(planningArrayBuf));
 
-      // Send to Express Backend endpoint
-      const response = await fetch('/api/coverage-control', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          zone,
-          contractsFileBase64: contractsBase64,
-          planningFileBase64: planningBase64
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur HTTP: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const { anomalies, warnings, xlsxBase64 } = data;
-
-      const hasAnomalies = anomalies && anomalies.length > 0;
+      const hasAnomalies = clientResult.anomalies && clientResult.anomalies.length > 0;
 
       setState(prev => ({
         ...prev,
         isVerifying: false,
-        warningsList: warnings || [],
-        xlsxBase64: xlsxBase64 || null,
-        results: anomalies || [],
+        warningsList: clientResult.warnings || [],
+        xlsxBase64: clientResult.xlsxBase64 || null,
+        results: clientResult.anomalies || [],
         hasRun: true,
         alert: {
           type: hasAnomalies ? 'warning' : 'success',
           title: hasAnomalies 
             ? `Contrôle terminé avec des anomalies (${zone.toUpperCase()})`
-            : `Toutes les vacations sont covered (${zone.toUpperCase()})`,
+            : `Toutes les vacations sont couvertes (${zone.toUpperCase()})`,
           message: hasAnomalies
-            ? `${anomalies.length} vacation(s) non couverte(s) détectée(s). Vous pouvez télécharger le rapport Excel.`
+            ? `${clientResult.anomalies.length} vacation(s) non couverte(s) détectée(s). Vous pouvez télécharger le rapport Excel.`
             : `✅ Toutes les vacations sont couvertes. Aucune anomalie de couverture détectée pour la zone ${zone.toUpperCase()}.`
         }
       }));
     } catch (err: any) {
-      console.warn("Backend API unavailable, executing client-side control...", err);
-      try {
-        const contractsArrayBuf = await state.contractsFile.arrayBuffer();
-        const planningArrayBuf = await state.planningFile.arrayBuffer();
-        
-        const { controleCouvertureOrly, controleCouvertureProvince } = await import('../services/coverageControlService');
-        const func = zone === 'province' ? controleCouvertureProvince : controleCouvertureOrly;
-        const clientResult = func(new Uint8Array(contractsArrayBuf), new Uint8Array(planningArrayBuf));
-
-        const hasAnomalies = clientResult.anomalies && clientResult.anomalies.length > 0;
-
-        setState(prev => ({
-          ...prev,
-          isVerifying: false,
-          warningsList: clientResult.warnings || [],
-          xlsxBase64: clientResult.xlsxBase64 || null,
-          results: clientResult.anomalies || [],
-          hasRun: true,
-          alert: {
-            type: hasAnomalies ? 'warning' : 'success',
-            title: hasAnomalies 
-              ? `Contrôle terminé avec des anomalies (${zone.toUpperCase()})`
-              : `Toutes les vacations sont couvertes (${zone.toUpperCase()})`,
-            message: hasAnomalies
-              ? `${clientResult.anomalies.length} vacation(s) non couverte(s) détectée(s). Vous pouvez télécharger le rapport Excel.`
-              : `✅ Toutes les vacations sont couvertes. Aucune anomalie de couverture détectée pour la zone ${zone.toUpperCase()}.`
-          }
-        }));
-      } catch (fallbackErr: any) {
-        setState(prev => ({
-          ...prev,
-          isVerifying: false,
-          hasRun: true,
-          alert: {
-            type: 'error',
-            title: 'Erreur lors du traitement',
-            message: err.message || 'Impossible d\'analyser les fichiers fournis.'
-          }
-        }));
-      }
+      console.error("Erreur lors du traitement de couverture :", err);
+      setState(prev => ({
+        ...prev,
+        isVerifying: false,
+        hasRun: true,
+        alert: {
+          type: 'error',
+          title: 'Erreur lors du traitement',
+          message: err?.message || 'Impossible d\'analyser les fichiers fournis.'
+        }
+      }));
     }
   };
 

@@ -299,13 +299,10 @@ export default function App() {
     addEvent("Base de données 'intérimaires' entièrement purgée. Prêt pour un nouvel import.", "warning");
   };
 
-  // Add standard event on load and execute immediate purge of collaborators as requested
+  // Add standard event on load
   useEffect(() => {
     addEvent("Base de données distante Supabase connectée (Realtime & Postgres)", "info");
     addEvent("Synchronisation multi-utilisateurs en temps réel activée", "success");
-    
-    // Purge all collaborators from database as requested
-    handleClearAllCollaborators();
   }, []);
 
   // Handler: Add Collaborator

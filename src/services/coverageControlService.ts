@@ -98,9 +98,9 @@ export function findCol(columns: string[], patterns: string[]): string | null {
   return columns.find(c => patterns.some(p => c.includes(p))) || null;
 }
 
-/** Lit un fichier (Buffer / Uint8Array) xlsx ou csv et renvoie un tableau d'objets. */
-export function readFileToRows(buffer: Buffer | Uint8Array): any[] {
-  const workbook = XLSX.read(buffer, { type: 'buffer', raw: true });
+/** Lit un fichier (Buffer / Uint8Array / ArrayBuffer) xlsx ou csv et renvoie un tableau d'objets. */
+export function readFileToRows(buffer: Buffer | Uint8Array | ArrayBuffer): any[] {
+  const workbook = XLSX.read(buffer, { type: 'array', raw: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   return XLSX.utils.sheet_to_json(sheet, { defval: null, raw: true });
 }
@@ -247,8 +247,7 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Non couvertes");
-    const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    xlsxBase64 = Buffer.from(xlsxBuffer).toString('base64');
+    xlsxBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
   }
 
   return { anomalies, warnings, xlsxBase64 };
@@ -360,8 +359,7 @@ export function controleCouvertureProvince(bufferContrats: Buffer | Uint8Array, 
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Non couvertes");
-    const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    xlsxBase64 = Buffer.from(xlsxBuffer).toString('base64');
+    xlsxBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
   }
 
   return { anomalies, warnings, xlsxBase64 };
