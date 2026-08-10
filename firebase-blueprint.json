@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "sessions": {
+      "title": "Training Sessions",
+      "description": "Shared training sessions with enrolled logs",
+      "properties": {
+        "id": { "type": "string", "description": "Session ID" },
+        "numSession": { "type": "string", "description": "Session number" },
+        "moduleName": { "type": "string", "description": "Module title" },
+        "dateDebut": { "type": "string", "description": "Start date YYYY-MM-DD" },
+        "dateFin": { "type": "string", "description": "End date YYYY-MM-DD" },
+        "formateur": { "type": "string", "description": "Instructor name" },
+        "idFormateur": { "type": "string", "description": "Instructor ID" },
+        "type": { "type": "string", "description": "Type e.g. INITIALE / RECYCLAGE" },
+        "cycle": { "type": "string", "description": "Cycle name" },
+        "durationHours": { "type": "number", "description": "Duration in hours" },
+        "escale": { "type": "string", "description": "Escale name" },
+        "service": { "type": "string", "description": "Service name" },
+        "lieu": { "type": "string", "description": "Location / Room" },
+        "status": { "type": "string", "description": "Status e.g. Planifiée, En cours, Terminée" },
+        "madEa": { "type": "boolean", "description": "MAD EA flag" },
+        "cttHbo": { "type": "boolean", "description": "CTT HBO flag" },
+        "convoc": { "type": "boolean", "description": "Convoc flag" },
+        "logs": { "type": "array", "description": "List of collaborator emargement logs" }
+      },
+      "required": ["id", "numSession", "moduleName", "dateDebut", "dateFin"]
+    },
+    "collaborators": {
+      "title": "Collaborators",
+      "description": "Collaborator / Agent registry",
+      "properties": {
+        "id": { "type": "string", "description": "Collaborator ID" },
+        "lastName": { "type": "string", "description": "Last name" },
+        "firstName": { "type": "string", "description": "First name" },
+        "matricule": { "type": "string", "description": "Agent matricule" },
+        "service": { "type": "string", "description": "Service" },
+        "escale": { "type": "string", "description": "Escale" },
+        "agency": { "type": "string", "description": "Agency name" },
+        "email": { "type": "string", "description": "Email address" },
+        "active": { "type": "boolean", "description": "Is active" }
+      },
+      "required": ["id", "lastName", "firstName"]
+    },
+    "modules": {
+      "title": "Modules Catalog",
+      "description": "Catalog of training modules",
+      "properties": {
+        "id": { "type": "string", "description": "Module ID" },
+        "code": { "type": "string", "description": "Module code e.g. MOD-01" },
+        "name": { "type": "string", "description": "Module name" },
+        "durationHours": { "type": "number", "description": "Duration in hours" },
+        "cycle": { "type": "string", "description": "Associated cycle" }
+      },
+      "required": ["id", "code", "name"]
+    },
+    "instructors": {
+      "title": "Instructors",
+      "description": "Formateurs list",
+      "properties": {
+        "id": { "type": "string", "description": "Instructor ID" },
+        "name": { "type": "string", "description": "Instructor name" },
+        "email": { "type": "string", "description": "Instructor email" },
+        "specialties": { "type": "array", "description": "List of module specialties" }
+      },
+      "required": ["id", "name"]
+    },
+    "app_settings": {
+      "title": "Application Settings",
+      "description": "Global app parameters including custom logo",
+      "properties": {
+        "id": { "type": "string", "description": "Setting key" },
+        "customLogo": { "type": "string", "description": "Base64 or URL of custom logo" }
+      },
+      "required": ["id"]
+    }
+  }
+}
