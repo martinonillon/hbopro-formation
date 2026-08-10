@@ -68,6 +68,7 @@ interface TrainingLogsProps {
   } | null;
   onClearFilters?: () => void;
   onViewCollaborator?: (collaboratorId: string) => void;
+  onDeduplicateLogs?: () => Promise<{ success: boolean; count?: number }> | { success: boolean; count?: number };
   isReadOnly?: boolean;
 }
 
@@ -80,8 +81,11 @@ export default function TrainingLogs({
   initialFilters,
   onClearFilters,
   onViewCollaborator,
+  onDeduplicateLogs,
   isReadOnly = false
 }: TrainingLogsProps) {
+  const [dedupResult, setDedupResult] = useState<string | null>(null);
+  const [isCleaning, setIsCleaning] = useState(false);
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEscale, setFilterEscale] = useState('ALL');
@@ -274,14 +278,44 @@ export default function TrainingLogs({
           
           <div className="flex flex-wrap items-center gap-2">
             {!isReadOnly && (
-              <button
-                onClick={onOpenEnrollment}
-                className="inline-flex items-center gap-1.5 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-all shadow-md shadow-[#0062FF]/10 cursor-pointer"
-                id="logs-enroll-btn"
-                title="Nouvelle Inscription"
-              >
-                <PlusCircle className="h-3.5 w-3.5" /> Nouvelle Inscription
-              </button>
+              <>
+                <button
+                  onClick={onOpenEnrollment}
+                  className="inline-flex items-center gap-1.5 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-all shadow-md shadow-[#0062FF]/10 cursor-pointer"
+                  id="logs-enroll-btn"
+                  title="Nouvelle Inscription"
+                >
+                  <PlusCircle className="h-3.5 w-3.5" /> Nouvelle Inscription
+                </button>
+                {onDeduplicateLogs && (
+                  <button
+                    onClick={async () => {
+                      setIsCleaning(true);
+                      setDedupResult(null);
+                      try {
+                        const res = await onDeduplicateLogs();
+                        if (res && res.count !== undefined) {
+                          if (res.count > 0) {
+                            setDedupResult(`Nettoyage réussi : ${res.count} enregistrement(s) en double supprimé(s).`);
+                          } else {
+                            setDedupResult(`Aucun doublon trouvé. Le registre est déjà propre.`);
+                          }
+                        }
+                      } catch (e: any) {
+                        setDedupResult(`Erreur lors du nettoyage : ${e?.message || String(e)}`);
+                      } finally {
+                        setIsCleaning(false);
+                      }
+                    }}
+                    disabled={isCleaning}
+                    className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm cursor-pointer"
+                    id="deduplicate-logs-btn"
+                    title="Détecter et supprimer les saises en double"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> {isCleaning ? 'Nettoyage en cours...' : 'Nettoyer les doublons'}
+                  </button>
+                )}
+              </>
             )}
             
             <button
@@ -293,6 +327,21 @@ export default function TrainingLogs({
             </button>
           </div>
         </div>
+
+        {dedupResult && (
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span>{dedupResult}</span>
+            </div>
+            <button 
+              onClick={() => setDedupResult(null)} 
+              className="text-amber-700 hover:text-amber-900 font-bold px-2 py-0.5 rounded-md cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Filters Panel */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 pt-2" id="filters-panel-grid">

@@ -30,6 +30,7 @@ import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES,
 import { INITIAL_COLLABORATORS, INITIAL_TRAINING_LOGS } from './data/collaboratorsData';
 import { DEFAULT_ADMIN_USER, INITIAL_USERS } from './data/usersData';
 import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from './utils/dateUtils';
+import { deduplicateTrainingLogs } from './utils/deduplicateLogs';
 import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
 import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupabase, checkAndMigrateLocalStorage, checkSupabaseHealth, clearSupabaseTable } from './lib/supabaseSync';
 const logoHubjob = '/src/assets/images/logo_hubjob_1784577741492.jpg';
@@ -255,7 +256,8 @@ export default function App() {
     // Supabase Real-time subscriptions
     const unsubSupaCollabs = syncSupabaseTable('collaborators', setCollaborators, [], handleSyncError);
     const unsubSupaLogs = syncSupabaseTable('training_logs', (data: TrainingLog[]) => {
-      setTrainingLogs(data.map(l => ({
+      const { uniqueLogs } = deduplicateTrainingLogs(data);
+      setTrainingLogs(uniqueLogs.map(l => ({
         ...l,
         formateur: l.formateur === 'Alyzia - Interne' ? 'Hubjob - Interne' : l.formateur,
         consigne: l.consigne === 'Facture Alyzia' || l.consigne === 'Facture Hubjob' ? 'Facturation client' : l.consigne
@@ -267,7 +269,8 @@ export default function App() {
     // Fallback Firestore real-time sync
     const unsubCollabs = syncCollection('collaborators', setCollaborators, []);
     const unsubLogs = syncCollection('training_logs', (data: TrainingLog[]) => {
-      setTrainingLogs(data.map(l => ({
+      const { uniqueLogs } = deduplicateTrainingLogs(data);
+      setTrainingLogs(uniqueLogs.map(l => ({
         ...l,
         formateur: l.formateur === 'Alyzia - Interne' ? 'Hubjob - Interne' : l.formateur,
         consigne: l.consigne === 'Facture Alyzia' || l.consigne === 'Facture Hubjob' ? 'Facturation client' : l.consigne
@@ -297,6 +300,32 @@ export default function App() {
     await clearSupabaseTable('collaborators', handleSupabaseWriteError);
     await clearFirestoreCollection('collaborators');
     addEvent("Base de données 'intérimaires' entièrement purgée. Prêt pour un nouvel import.", "warning");
+  };
+
+  // Clean and deduplicate all training logs
+  const handleDeduplicateLogs = async () => {
+    const { uniqueLogs, duplicateCount } = deduplicateTrainingLogs(trainingLogs);
+    if (duplicateCount === 0) {
+      addEvent("Nettoyage du registre : Aucun doublon trouvé dans l'historique.", "info");
+      return { success: true, count: 0 };
+    }
+
+    setTrainingLogs(uniqueLogs);
+    try {
+      localStorage.setItem('alyzia_training_logs', JSON.stringify(uniqueLogs));
+    } catch (e) {
+      console.warn("localStorage write error", e);
+    }
+
+    // Clear remote databases and re-upload unique logs
+    await clearSupabaseTable('training_logs', handleSupabaseWriteError);
+    await clearFirestoreCollection('training_logs');
+
+    saveBulkToFirestore('training_logs', uniqueLogs);
+    await saveBulkToSupabase('training_logs', uniqueLogs, handleSupabaseWriteError);
+
+    addEvent(`Clean des doublons effectué : ${duplicateCount} doublon(s) supprimé(s). (${uniqueLogs.length} suivis conservés dans Supabase).`, "success");
+    return { success: true, count: duplicateCount };
   };
 
   // Add standard event on load
@@ -1244,6 +1273,9 @@ export default function App() {
           return { success: false, message: "Aucune ligne d'historique valide n'a pu être lue." };
         }
 
+        // Deduplicate imported history logs to prevent duplicates
+        const { uniqueLogs: cleanedImportLogs } = deduplicateTrainingLogs(newLogs);
+
         // 1. If any new collaborators were dynamically created during history import, insert them into Supabase first
         if (missingCollabsMap.size > 0) {
           const missingCollabsList = Array.from(missingCollabsMap.values());
@@ -1253,36 +1285,39 @@ export default function App() {
         }
 
         // 2. Perform replace vs append for training_logs in Supabase & Firestore
+        let finalLogsToSave = cleanedImportLogs;
         if (mode === 'replace') {
           await clearSupabaseTable('training_logs', handleSupabaseWriteError);
           await clearFirestoreCollection('training_logs');
-          setTrainingLogs(newLogs);
+          setTrainingLogs(cleanedImportLogs);
         } else {
-          setTrainingLogs(prev => [...prev, ...newLogs]);
+          const { uniqueLogs: combinedUnique } = deduplicateTrainingLogs([...trainingLogs, ...cleanedImportLogs]);
+          finalLogsToSave = combinedUnique;
+          setTrainingLogs(combinedUnique);
         }
 
-        // 3. Save logs to Firestore and Supabase (AWAITED!)
-        saveBulkToFirestore('training_logs', newLogs);
+        // 3. Save logs to Firestore and Supabase
+        saveBulkToFirestore('training_logs', finalLogsToSave);
         let lastSupaErr = '';
-        const supaSuccess = await saveBulkToSupabase('training_logs', newLogs, (errMsg) => {
+        const supaSuccess = await saveBulkToSupabase('training_logs', finalLogsToSave, (errMsg) => {
           lastSupaErr = errMsg;
           handleSupabaseWriteError(errMsg);
         });
 
         if (!supaSuccess) {
-          console.error("[Import Error] Supabase a retourné une erreur lors de l'enregistrement du registre historique:", newLogs);
-          addEvent(`⚠️ Problème lors de la sauvegarde Supabase de l'historique de formation (${newLogs.length} enregistrements) : ${lastSupaErr}`, 'error');
+          console.error("[Import Error] Supabase a retourné une erreur lors de l'enregistrement du registre historique:", finalLogsToSave);
+          addEvent(`⚠️ Problème lors de la sauvegarde Supabase de l'historique de formation (${finalLogsToSave.length} enregistrements) : ${lastSupaErr}`, 'error');
           return {
             success: false,
-            message: `L'import local a fonctionné (${newLogs.length} dossiers), mais la sauvegarde Supabase a échoué : ${lastSupaErr || 'Vérifiez la structure de votre table Supabase.'}`
+            message: `L'import local a fonctionné (${finalLogsToSave.length} dossiers), mais la sauvegarde Supabase a échoué : ${lastSupaErr || 'Vérifiez la structure de votre table Supabase.'}`
           };
         }
 
-        addEvent(`Historique de formation mis à jour dans Supabase (${mode === 'replace' ? 'Remplacement' : 'Ajout'}) : ${newLogs.length} suivis.`, 'success');
+        addEvent(`Historique de formation mis à jour dans Supabase (${mode === 'replace' ? 'Remplacement' : 'Ajout'}) : ${finalLogsToSave.length} suivis.`, 'success');
         return { 
           success: true, 
-          message: `Félicitations ! L'historique de suivi de formation (${newLogs.length} dossiers) a été enregistré et conservé avec succès dans Supabase (${mode === 'replace' ? 'Remplacé' : 'Ajouté'}).`, 
-          count: newLogs.length 
+          message: `Félicitations ! L'historique de suivi de formation (${finalLogsToSave.length} dossiers uniques) a été enregistré et conservé avec succès dans Supabase (${mode === 'replace' ? 'Remplacé' : 'Ajouté'}).`, 
+          count: finalLogsToSave.length 
         };
       }
 
@@ -1589,6 +1624,7 @@ export default function App() {
                 setSelectedCollabId(collabId);
                 setActiveTab('collaborators');
               }}
+              onDeduplicateLogs={handleDeduplicateLogs}
               isReadOnly={currentUser.permissions.logs === 'Lecture'}
             />
           )}
