@@ -93,6 +93,8 @@ export default function TrainingLogs({
   const [filterConsigne, setFilterConsigne] = useState('ALL');
   const [filterResult, setFilterResult] = useState('EN_COURS_A_TRAITER');
   const [filterType, setFilterType] = useState('ALL');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
 
   // Sync initialFilters when passed from dashboard
   useEffect(() => {
@@ -163,9 +165,29 @@ export default function TrainingLogs({
       // Handle MAD Ea filter (case non cochée = 1 à réaliser / à comptabiliser dans l'indice)
       const matchesMadEa = !initialFilters?.madEa || (log.resultat === 'En cours' && !log.madEa);
 
-      return matchesSearch && matchesEscale && matchesService && matchesConsigne && matchesResult && matchesType && matchesMadEa;
+      // Handle Date Period Filter
+      let matchesDate = true;
+      if (filterStartDate || filterEndDate) {
+        const startTs = filterStartDate ? new Date(`${filterStartDate}T00:00:00`).getTime() : 0;
+        const endTs = filterEndDate ? new Date(`${filterEndDate}T23:59:59.999`).getTime() : Infinity;
+
+        const debutTime = parseDateToTime(log.dateDebut || log.dateInscription);
+        const finTime = parseDateToTime(log.dateFin || log.dateDebut || log.dateInscription);
+
+        const effectiveStart = debutTime || finTime;
+        const effectiveEnd = finTime || debutTime;
+
+        if (effectiveStart || effectiveEnd) {
+          if (startTs > 0 && effectiveEnd < startTs) matchesDate = false;
+          if (endTs !== Infinity && effectiveStart > endTs) matchesDate = false;
+        } else {
+          matchesDate = false;
+        }
+      }
+
+      return matchesSearch && matchesEscale && matchesService && matchesConsigne && matchesResult && matchesType && matchesMadEa && matchesDate;
     });
-  }, [trainingLogs, searchTerm, filterEscale, filterService, filterConsigne, filterResult, filterType, initialFilters]);
+  }, [trainingLogs, searchTerm, filterEscale, filterService, filterConsigne, filterResult, filterType, filterStartDate, filterEndDate, initialFilters]);
 
   // Sort logic
   const sortedLogs = useMemo(() => {
@@ -343,8 +365,58 @@ export default function TrainingLogs({
           </div>
         )}
 
+        {/* Date Period Filter Bar (sur le même modèle que le filtre période KPI, sans les années préenregistrées) */}
+        <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs" id="logs-date-filter-bar">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 font-bold text-slate-800">
+              <Calendar className="h-4 w-4 text-[#0062FF]" />
+              <span>Filtre période :</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">du</span>
+              <input
+                type="date"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-mono focus:outline-none focus:border-[#0062FF] shadow-2xs"
+                id="logs-start-date-input"
+              />
+              <span className="text-slate-400 font-medium">au</span>
+              <input
+                type="date"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-mono focus:outline-none focus:border-[#0062FF] shadow-2xs"
+                id="logs-end-date-input"
+              />
+            </div>
+
+            {(filterStartDate || filterEndDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStartDate('');
+                  setFilterEndDate('');
+                }}
+                className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] rounded-lg transition-all cursor-pointer"
+                id="logs-clear-date-filter-btn"
+                title="Effacer les dates"
+              >
+                Réinitialiser la période
+              </button>
+            )}
+          </div>
+
+          {(filterStartDate || filterEndDate) && (
+            <div className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100 flex items-center gap-1">
+              <span>{filteredLogs.length} formation(s) dans cette période</span>
+            </div>
+          )}
+        </div>
+
         {/* Filters Panel */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 pt-2" id="filters-panel-grid">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 pt-1" id="filters-panel-grid">
           {/* Search text */}
           <div className="lg:col-span-2 relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -436,7 +508,11 @@ export default function TrainingLogs({
               </span>
             </div>
             <button
-              onClick={onClearFilters}
+              onClick={() => {
+                setFilterStartDate('');
+                setFilterEndDate('');
+                if (onClearFilters) onClearFilters();
+              }}
               className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-md text-[10px] font-bold text-slate-700 cursor-pointer transition-all shrink-0"
             >
               Réinitialiser les filtres
