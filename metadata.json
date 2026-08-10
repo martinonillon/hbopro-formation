@@ -1,6 +1,6 @@
 {
-  "name": "Suivi de Formation Collaborateurs",
-  "description": "Application intuitive et visuelle de gestion et suivi en temps réel des formations des collaborateurs, basée sur la structure de votre fichier d'escales et de modules.",
+  "name": "Hubjob Formation",
+  "description": "Application intuitive et visuelle de gestion et suivi en temps réel des formations des collaborateurs Hubjob.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
