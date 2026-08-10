@@ -44,6 +44,28 @@ export function syncCollection<T extends { id: string }>(
 }
 
 /**
+ * Helper to recursively sanitize objects for Firestore (replaces undefined with null)
+ * to prevent 'Unsupported field value: undefined' errors.
+ */
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      clean[key] = null;
+    } else if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+      clean[key] = sanitizeForFirestore(value);
+    } else {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
+/**
  * Saves or updates a single item in a Firestore collection
  */
 export async function saveItemToFirestore<T extends { id: string }>(
@@ -52,7 +74,8 @@ export async function saveItemToFirestore<T extends { id: string }>(
 ): Promise<void> {
   try {
     const docRef = doc(db, collectionName, item.id);
-    await setDoc(docRef, item, { merge: true });
+    const cleanItem = sanitizeForFirestore(item);
+    await setDoc(docRef, cleanItem, { merge: true });
   } catch (err) {
     console.error(`Error saving item to Firestore (${collectionName}/${item.id}):`, err);
   }
@@ -104,7 +127,8 @@ export async function saveBulkToFirestore<T extends { id: string }>(
     const batch = writeBatch(db);
     items.forEach((item) => {
       const docRef = doc(db, collectionName, item.id);
-      batch.set(docRef, item, { merge: true });
+      const cleanItem = sanitizeForFirestore(item);
+      batch.set(docRef, cleanItem, { merge: true });
     });
     await batch.commit();
   } catch (err) {

@@ -56,6 +56,28 @@ export function syncSupabaseTable<T extends { id: string }>(
   // Function to load initial data
   const loadInitialData = async () => {
     try {
+      if (tableName === 'training_logs') {
+        const { data, error } = await supabase.from('training_logs').select('*');
+        if (error) {
+          console.warn(`Supabase select error on training_logs:`, error.message);
+          if (onError) {
+            onError(`Impossible de lire la table Supabase 'training_logs': ${error.message}`);
+          }
+          return;
+        }
+
+        const logs = (data || []).map((item: any) => {
+          if (item && item.data && typeof item.data === 'object' && Object.keys(item.data).length > 0) {
+            return { id: item.id, ...item.data };
+          }
+          return item;
+        }).filter(Boolean) as T[];
+
+        currentItems = logs;
+        onDataUpdate(currentItems);
+        return;
+      }
+
       const { data, error } = await supabase.from(tableName).select('*');
       if (error) {
         console.warn(`Supabase select error on ${tableName}:`, error.message);
@@ -84,6 +106,22 @@ export function syncSupabaseTable<T extends { id: string }>(
       'postgres_changes',
       { event: '*', schema: 'public', table: tableName },
       (payload) => {
+        if (tableName === 'training_logs') {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const row = payload.new as any;
+            const logItem = (row && row.data ? row.data : row) as T;
+            if (logItem && logItem.id) {
+              currentItems = [logItem, ...currentItems.filter((item) => item.id !== logItem.id)];
+              onDataUpdate([...currentItems]);
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const oldRow = payload.old as { id: string };
+            currentItems = currentItems.filter((item) => item.id !== oldRow.id);
+            onDataUpdate([...currentItems]);
+          }
+          return;
+        }
+
         if (payload.eventType === 'INSERT') {
           const newRow = payload.new as T;
           currentItems = [newRow, ...currentItems.filter((item) => item.id !== newRow.id)];
@@ -118,35 +156,44 @@ export function syncSupabaseTable<T extends { id: string }>(
  * Helper to validate and convert date strings into ISO/SQL YYYY-MM-DD or null
  */
 function toSqlDateOrNull(val: any): string | null {
-  if (!val || typeof val !== 'string') {
-    if (val instanceof Date && !isNaN(val.getTime())) {
+  if (val === null || val === undefined || val === '') return null;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === 'NaN') return null;
+
+    // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+    if (/^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4}$/.test(trimmed)) {
+      const parts = trimmed.split(/[\/.-]/);
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2];
+      const mNum = parseInt(month, 10);
+      const dNum = parseInt(day, 10);
+      if (mNum >= 1 && mNum <= 12 && dNum >= 1 && dNum <= 31) {
+        return `${year}-${month}-${day}`;
+      }
+      return null;
+    }
+
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      const isoPart = trimmed.substring(0, 10);
+      if (!isNaN(Date.parse(isoPart))) {
+        return isoPart;
+      }
+      return null;
+    }
+
+    // Try standard Date parsing
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } else if (val instanceof Date) {
+    if (!isNaN(val.getTime())) {
       return val.toISOString().split('T')[0];
     }
-    return null;
   }
-  const trimmed = val.trim();
-  if (!trimmed) return null;
-
-  // DD/MM/YYYY or DD-MM-YYYY
-  if (/^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4}$/.test(trimmed)) {
-    const parts = trimmed.split(/[\/.-]/);
-    const day = parts[0].padStart(2, '0');
-    const month = parts[1].padStart(2, '0');
-    const year = parts[2];
-    return `${year}-${month}-${day}`;
-  }
-
-  // YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    return trimmed.substring(0, 10);
-  }
-
-  // Try Date.parse
-  const d = new Date(trimmed);
-  if (!isNaN(d.getTime())) {
-    return d.toISOString().split('T')[0];
-  }
-
   return null;
 }
 
@@ -154,95 +201,232 @@ function toSqlDateOrNull(val: any): string | null {
  * Helper to convert numeric fields like montantFacture into number or null
  */
 function toNumericOrNull(val: any): number | null {
-  if (val === null || val === undefined || val === '') return null;
-  if (typeof val === 'number') return isNaN(val) ? null : val;
+  if (val === null || val === undefined || val === '' || val === 'null' || val === 'undefined') return null;
+  if (typeof val === 'number') return isNaN(val) || !isFinite(val) ? null : val;
   if (typeof val === 'string') {
-    const cleaned = parseFloat(val.replace(',', '.').replace(/[^0-9.-]/g, ''));
-    return isNaN(cleaned) ? null : cleaned;
+    const cleanedStr = val.replace(',', '.').replace(/[^0-9.-]/g, '');
+    if (!cleanedStr) return null;
+    const cleaned = parseFloat(cleanedStr);
+    return isNaN(cleaned) || !isFinite(cleaned) ? null : cleaned;
   }
   return null;
 }
 
 /**
+ * Helper to extract missing column name from Supabase/PostgREST error messages
+ */
+export function extractMissingColumnFromError(error: any): string | null {
+  if (!error) return null;
+  const str = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
+  
+  // Pattern 1: Could not find the 'column_name' column of 'table_name' in the schema cache
+  const match1 = str.match(/Could not find the ['"]([^'"]+)['"] column/i);
+  if (match1 && match1[1]) return match1[1];
+
+  // Pattern 2: column "column_name" of relation "table_name" does not exist
+  const match2 = str.match(/column ['"]?([a-zA-Z0-9_]+)['"]? (?:of relation .*)?does not exist/i);
+  if (match2 && match2[1]) return match2[1];
+
+  // Pattern 3: relation "table_name" has no column "column_name"
+  const match3 = str.match(/has no column ['"]?([a-zA-Z0-9_]+)['"]?/i);
+  if (match3 && match3[1]) return match3[1];
+
+  // Pattern 4: 'column_name' column missing
+  const match4 = str.match(/['"]([a-zA-Z0-9_]+)['"] column/i);
+  if (match4 && match4[1]) return match4[1];
+
+  return null;
+}
+
+/**
  * Sanitizes items specifically for each Supabase table to match table columns exactly
- * and prevent HTTP 404 / column mismatch errors.
+ * and prevent HTTP 400 / 404 / column mismatch errors.
+ * Includes dual camelCase / snake_case mapping for maximum compatibility.
  */
 export function sanitizeItemForTable(tableName: string, item: any): Record<string, any> {
   if (!item || typeof item !== 'object') return {};
 
+  const strOrNull = (val: any): string | null => {
+    if (val === undefined || val === null) return null;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      return trimmed === '' ? null : trimmed;
+    }
+    return String(val);
+  };
+
+  const strOrEmpty = (val: any): string => {
+    if (val === undefined || val === null) return '';
+    if (typeof val === 'string') return val.trim();
+    return String(val);
+  };
+
   if (tableName === 'training_logs') {
-    const clean: Record<string, any> = {};
-    const allowedColumns = [
-      'id', 'collaboratorId', 'collaboratorName', 'moduleName', 'formateur',
-      'type', 'cycle', 'escale', 'service', 'visa', 'resultat', 'consigne',
-      'dateInscription', 'dateValidation', 'dateDebut', 'dateFin', 'notes',
-      'idFormateur', 'heureDebut1', 'heureFin1', 'heureDebut2', 'heureFin2',
-      'madEa', 'cttHbo', 'convoc', 'lieu', 'numSession', 'emrg', 'attest',
-      'emrgFileUrl', 'emrgFileName', 'datePaye', 'commentairePaye',
-      'numFacture', 'montantFacture'
-    ];
+    const logId = item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'l-' + Math.random().toString(36).substring(2, 9));
+    
+    // Clean data payload for JSONB column without undefined values
+    const jsonPayload = JSON.parse(JSON.stringify(item, (_key, val) => (val === undefined ? null : val)));
 
-    allowedColumns.forEach(col => {
-      if (item[col] !== undefined) {
-        clean[col] = item[col];
-      }
-    });
+    const clean: Record<string, any> = {
+      id: logId,
+      data: jsonPayload
+    };
 
-    if (!clean.id) clean.id = item.id || ('l-' + Math.random().toString(36).substring(2, 9));
+    // String fields - non null
+    const collabId = strOrEmpty(item.collaboratorId || item.collaborator_id);
+    clean.collaboratorId = collabId;
+    clean.collaborator_id = collabId;
+
+    const collabName = strOrEmpty(item.collaboratorName || item.collaborator_name);
+    clean.collaboratorName = collabName;
+    clean.collaborator_name = collabName;
+
+    const modName = strOrEmpty(item.moduleName || item.module_name);
+    clean.moduleName = modName;
+    clean.module_name = modName;
+
+    clean.formateur = strOrEmpty(item.formateur);
+    clean.type = strOrEmpty(item.type);
+    clean.cycle = strOrEmpty(item.cycle);
+    clean.escale = strOrEmpty(item.escale);
+    clean.service = strOrEmpty(item.service);
+    clean.resultat = strOrEmpty(item.resultat);
+    clean.consigne = strOrEmpty(item.consigne);
 
     // Dates
-    ['dateInscription', 'dateValidation', 'dateDebut', 'dateFin', 'datePaye'].forEach(dateCol => {
-      if (clean[dateCol] !== undefined) {
-        clean[dateCol] = toSqlDateOrNull(clean[dateCol]);
-      }
-    });
+    const dInsc = toSqlDateOrNull(item.dateInscription || item.date_inscription);
+    clean.dateInscription = dInsc;
+    clean.date_inscription = dInsc;
+
+    const dDeb = toSqlDateOrNull(item.dateDebut || item.date_debut);
+    clean.dateDebut = dDeb;
+    clean.date_debut = dDeb;
+
+    const dFin = toSqlDateOrNull(item.dateFin || item.date_fin);
+    clean.dateFin = dFin;
+    clean.date_fin = dFin;
+
+    const dPaye = toSqlDateOrNull(item.datePaye || item.date_paye);
+    clean.datePaye = dPaye;
+    clean.date_paye = dPaye;
 
     // Numbers
-    clean.montantFacture = toNumericOrNull(clean.montantFacture);
+    const montant = toNumericOrNull(item.montantFacture ?? item.montant_facture);
+    clean.montantFacture = montant;
+    clean.montant_facture = montant;
 
     // Booleans
-    ['madEa', 'cttHbo', 'convoc', 'emrg', 'attest'].forEach(boolCol => {
-      if (clean[boolCol] !== undefined) {
-        clean[boolCol] = Boolean(clean[boolCol]);
-      }
-    });
+    const mad = Boolean(item.madEa ?? item.mad_ea);
+    clean.madEa = mad;
+    clean.mad_ea = mad;
 
-    // String nullability
-    ['visa', 'notes', 'idFormateur', 'heureDebut1', 'heureFin1', 'heureDebut2', 'heureFin2',
-     'lieu', 'numSession', 'emrgFileUrl', 'emrgFileName', 'commentairePaye', 'numFacture'].forEach(strCol => {
-      if (clean[strCol] === '' || clean[strCol] === undefined) {
-        clean[strCol] = null;
-      }
-    });
+    const ctt = Boolean(item.cttHbo ?? item.ctt_hbo);
+    clean.cttHbo = ctt;
+    clean.ctt_hbo = ctt;
+
+    clean.convoc = Boolean(item.convoc);
+    clean.emrg = Boolean(item.emrg);
+    clean.attest = Boolean(item.attest);
+
+    // Nullable strings
+    clean.visa = strOrNull(item.visa);
+    clean.notes = strOrNull(item.notes);
+
+    const idForm = strOrNull(item.idFormateur || item.id_formateur);
+    clean.idFormateur = idForm;
+    clean.id_formateur = idForm;
+
+    const hDeb1 = strOrNull(item.heureDebut1 || item.heure_debut_1);
+    clean.heureDebut1 = hDeb1;
+    clean.heure_debut_1 = hDeb1;
+
+    const hFin1 = strOrNull(item.heureFin1 || item.heure_fin_1);
+    clean.heureFin1 = hFin1;
+    clean.heure_fin_1 = hFin1;
+
+    const hDeb2 = strOrNull(item.heureDebut2 || item.heure_debut_2);
+    clean.heureDebut2 = hDeb2;
+    clean.heure_debut_2 = hDeb2;
+
+    const hFin2 = strOrNull(item.heureFin2 || item.heure_fin_2);
+    clean.heureFin2 = hFin2;
+    clean.heure_fin_2 = hFin2;
+
+    clean.lieu = strOrNull(item.lieu);
+
+    const nSess = strOrNull(item.numSession || item.num_session);
+    clean.numSession = nSess;
+    clean.num_session = nSess;
+
+    const emrgUrl = strOrNull(item.emrgFileUrl || item.emrg_file_url);
+    clean.emrgFileUrl = emrgUrl;
+    clean.emrg_file_url = emrgUrl;
+
+    const commPaye = strOrNull(item.commentairePaye || item.commentaire_paye);
+    clean.commentairePaye = commPaye;
+    clean.commentaire_paye = commPaye;
+
+    const nFact = strOrNull(item.numFacture || item.num_facture);
+    clean.numFacture = nFact;
+    clean.num_facture = nFact;
 
     return clean;
   }
 
   if (tableName === 'collaborators') {
     const clean: Record<string, any> = {};
-    const allowedColumns = ['id', 'firstName', 'lastName', 'email', 'escale', 'service', 'avatar', 'hireDate', 'matricule', 'phone'];
-    allowedColumns.forEach(col => {
-      if (item[col] !== undefined) clean[col] = item[col];
-    });
-    if (clean.hireDate !== undefined) clean.hireDate = toSqlDateOrNull(clean.hireDate);
+    const fName = strOrEmpty(item.firstName || item.first_name);
+    const lName = strOrEmpty(item.lastName || item.last_name);
+    const hDate = toSqlDateOrNull(item.hireDate || item.hire_date);
+
+    clean.id = item.id;
+    clean.firstName = fName;
+    clean.first_name = fName;
+    clean.lastName = lName;
+    clean.last_name = lName;
+    clean.email = strOrEmpty(item.email);
+    clean.escale = strOrEmpty(item.escale);
+    clean.service = strOrEmpty(item.service);
+    clean.avatar = strOrNull(item.avatar);
+    clean.hireDate = hDate;
+    clean.hire_date = hDate;
+    clean.matricule = strOrEmpty(item.matricule);
+    clean.phone = strOrEmpty(item.phone);
     return clean;
   }
 
   if (tableName === 'modules_catalog') {
     const clean: Record<string, any> = {};
-    const allowedColumns = ['id', 'name', 'formateur', 'type', 'cycle', 'escale', 'service', 'visa', 'resultat', 'consigne', 'category', 'code'];
-    allowedColumns.forEach(col => {
-      if (item[col] !== undefined) clean[col] = item[col];
-    });
+    clean.id = item.id;
+    clean.name = strOrEmpty(item.name);
+    clean.formateur = strOrEmpty(item.formateur);
+    clean.type = strOrEmpty(item.type);
+    clean.cycle = strOrEmpty(item.cycle);
+    clean.escale = strOrEmpty(item.escale);
+    clean.service = strOrEmpty(item.service);
+    clean.visa = strOrNull(item.visa);
+    clean.resultat = strOrEmpty(item.resultat);
+    clean.consigne = strOrEmpty(item.consigne);
+    clean.category = strOrEmpty(item.category);
+    clean.code = strOrEmpty(item.code);
     return clean;
   }
 
   if (tableName === 'users') {
     const clean: Record<string, any> = {};
-    const allowedColumns = ['id', 'username', 'lastName', 'firstName', 'role', 'permissions', 'createdAt'];
-    allowedColumns.forEach(col => {
-      if (item[col] !== undefined) clean[col] = item[col];
-    });
+    clean.id = item.id;
+    clean.username = strOrEmpty(item.username);
+    const fName = strOrEmpty(item.firstName || item.first_name);
+    const lName = strOrEmpty(item.lastName || item.last_name);
+    clean.firstName = fName;
+    clean.first_name = fName;
+    clean.lastName = lName;
+    clean.last_name = lName;
+    clean.role = strOrEmpty(item.role || 'AGENT');
+    clean.permissions = item.permissions || [];
+    const cAt = item.createdAt || item.created_at || new Date().toISOString();
+    clean.createdAt = cAt;
+    clean.created_at = cAt;
     return clean;
   }
 
@@ -264,22 +448,7 @@ export async function saveToSupabase<T extends { id: string }>(
   item: T,
   onError?: (errMessage: string) => void
 ): Promise<boolean> {
-  try {
-    const sanitizedItem = sanitizeItemForTable(tableName, item);
-    const { error } = await supabase.from(tableName).upsert(sanitizedItem, { onConflict: 'id' });
-    if (error) {
-      console.error(`Supabase save error on '${tableName}':`, error.message, error.details, error.hint, error.code);
-      const msg = `Erreur d'enregistrement Supabase (table '${tableName}'): ${error.message}${error.details ? ` (${error.details})` : ''}`;
-      if (onError) onError(msg);
-      return false;
-    }
-    return true;
-  } catch (err: any) {
-    console.error(`Exception saving to Supabase ${tableName}:`, err);
-    const msg = `Exception réseau Supabase (table '${tableName}'): ${err?.message || String(err)}`;
-    if (onError) onError(msg);
-    return false;
-  }
+  return saveBulkToSupabase(tableName, [item], onError);
 }
 
 /**
@@ -333,6 +502,8 @@ export async function deleteFromSupabase(
 
 /**
  * Saves a list of items in bulk to a Supabase table
+ * Features a fallback/degraded mode that detects missing schema columns,
+ * strips them automatically, and retries the upsert to prevent complete blockage.
  */
 export async function saveBulkToSupabase<T extends { id: string }>(
   tableName: string,
@@ -342,41 +513,83 @@ export async function saveBulkToSupabase<T extends { id: string }>(
   if (!items || items.length === 0) return true;
 
   const sanitizedItems = items.map(item => sanitizeItemForTable(tableName, item));
+  const knownMissingCols = new Set<string>();
 
-  // Batch in chunks of 50 items to avoid payload limits & timeouts
-  const CHUNK_SIZE = 50;
+  // Batch in chunks (100 for training_logs, 50 for other tables) to avoid payload limits & timeouts
+  const CHUNK_SIZE = tableName === 'training_logs' ? 100 : 50;
   let allSuccessful = true;
   let firstErrorMessage = '';
 
   for (let i = 0; i < sanitizedItems.length; i += CHUNK_SIZE) {
-    const chunk = sanitizedItems.slice(i, i + CHUNK_SIZE);
-    try {
-      const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
-      if (error) {
-        console.error(`[Supabase Error] Bulk save failed on '${tableName}' (chunk ${Math.floor(i / CHUNK_SIZE) + 1}/${Math.ceil(sanitizedItems.length / CHUNK_SIZE)}):`, {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
+    let chunk = sanitizedItems.slice(i, i + CHUNK_SIZE);
+
+    // Strip known missing columns from this chunk before trying
+    if (knownMissingCols.size > 0) {
+      chunk = chunk.map(row => {
+        const cleanRow = { ...row };
+        knownMissingCols.forEach(col => delete cleanRow[col]);
+        return cleanRow;
+      });
+    }
+
+    let chunkSuccess = false;
+    let retriesLeft = 20;
+
+    while (!chunkSuccess && retriesLeft > 0) {
+      retriesLeft--;
+      try {
+        const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+
+        if (!error) {
+          chunkSuccess = true;
+          break;
+        }
+
+        console.warn(`[Supabase Error] Bulk save on '${tableName}' (chunk ${Math.floor(i / CHUNK_SIZE) + 1}): ${error.message} (${error.details || ''})`);
+
+        // Check if error is due to a missing/invalid column in the schema
+        const missingCol = extractMissingColumnFromError(error);
+
+        if (missingCol) {
+          console.warn(`[Supabase Fallback] Column '${missingCol}' does not exist in table '${tableName}'. Stripping column and retrying chunk...`);
+          knownMissingCols.add(missingCol);
+          chunk = chunk.map(row => {
+            const copy = { ...row };
+            delete copy[missingCol];
+            return copy;
+          });
+          // Retry loop with stripped chunk
+          continue;
+        }
+
+        // If not a missing column error (e.g. auth error, constraint failure, connection issue):
         const errDetail = `${error.message}${error.details ? ` (${error.details})` : ''}${error.hint ? ` [Hint: ${error.hint}]` : ''}`;
         if (!firstErrorMessage) {
           firstErrorMessage = errDetail;
         }
         allSuccessful = false;
+        break;
+      } catch (err: any) {
+        console.error(`[Supabase Exception] Exception bulk saving to table '${tableName}':`, err);
+        const excMsg = err?.message || String(err);
+        if (!firstErrorMessage) {
+          firstErrorMessage = excMsg;
+        }
+        allSuccessful = false;
+        break;
       }
-    } catch (err: any) {
-      console.error(`[Supabase Exception] Exception bulk saving to table '${tableName}':`, err);
-      const excMsg = err?.message || String(err);
+    }
+
+    if (!chunkSuccess && retriesLeft === 0) {
       if (!firstErrorMessage) {
-        firstErrorMessage = excMsg;
+        firstErrorMessage = `Échec après plusieurs essais pour la table '${tableName}'.`;
       }
       allSuccessful = false;
     }
   }
 
   if (!allSuccessful && onError) {
-    onError(`Erreur d'enregistrement Supabase (table '${tableName}'): ${firstErrorMessage}`);
+    onError(firstErrorMessage || `Erreur d'enregistrement Supabase sur table '${tableName}'`);
   }
 
   return allSuccessful;

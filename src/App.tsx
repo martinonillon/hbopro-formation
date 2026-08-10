@@ -1263,14 +1263,18 @@ export default function App() {
 
         // 3. Save logs to Firestore and Supabase (AWAITED!)
         saveBulkToFirestore('training_logs', newLogs);
-        const supaSuccess = await saveBulkToSupabase('training_logs', newLogs, handleSupabaseWriteError);
+        let lastSupaErr = '';
+        const supaSuccess = await saveBulkToSupabase('training_logs', newLogs, (errMsg) => {
+          lastSupaErr = errMsg;
+          handleSupabaseWriteError(errMsg);
+        });
 
         if (!supaSuccess) {
           console.error("[Import Error] Supabase a retourné une erreur lors de l'enregistrement du registre historique:", newLogs);
-          addEvent(`⚠️ Problème lors de la sauvegarde Supabase de l'historique de formation (${newLogs.length} enregistrements).`, 'error');
+          addEvent(`⚠️ Problème lors de la sauvegarde Supabase de l'historique de formation (${newLogs.length} enregistrements) : ${lastSupaErr}`, 'error');
           return {
             success: false,
-            message: `L'import local a fonctionné (${newLogs.length} dossiers), mais la sauvegarde Supabase a échoué. Vérifiez votre connexion Supabase et les contraintes de table dans la console.`
+            message: `L'import local a fonctionné (${newLogs.length} dossiers), mais la sauvegarde Supabase a échoué : ${lastSupaErr || 'Vérifiez la structure de votre table Supabase.'}`
           };
         }
 
