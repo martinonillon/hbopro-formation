@@ -335,6 +335,9 @@ function ZoneCard({
 
       <div className="p-5 space-y-5 flex-1 flex flex-col">
         
+        {/* Extraction Instructions (Always Visible) */}
+        <ExtractionGuidePanel zoneTitle={title} />
+
         {/* Upload Inputs Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           
@@ -398,31 +401,27 @@ function ZoneCard({
         )}
 
         {/* Alert / Main Status Banner */}
-        {!state.isVerifying && state.alert && (
-          state.alert.message === DEFAULT_INFO_MESSAGE ? (
-            <ExtractionGuidePanel zoneTitle={title} />
-          ) : (
-            <div className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
-              state.alert.type === 'success'
-                ? 'bg-emerald-50 border-2 border-emerald-300 text-emerald-950 shadow-2xs'
-                : state.alert.type === 'warning'
-                ? 'bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-2xs'
-                : state.alert.type === 'error'
-                ? 'bg-rose-50 border-2 border-rose-300 text-rose-950 shadow-2xs'
-                : 'bg-slate-50 border border-slate-200 text-slate-900'
-            }`}>
-              <div className="shrink-0 mt-0.5">
-                {state.alert.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
-                {state.alert.type === 'warning' && <AlertTriangle className="h-5 w-5 text-amber-600" />}
-                {state.alert.type === 'error' && <AlertTriangle className="h-5 w-5 text-rose-600" />}
-                {state.alert.type === 'info' && <Info className="h-5 w-5 text-blue-600" />}
-              </div>
-              <div className="space-y-0.5 text-xs">
-                <h4 className="font-extrabold tracking-tight text-sm">{state.alert.title}</h4>
-                <p className="leading-relaxed font-medium whitespace-pre-line">{state.alert.message}</p>
-              </div>
+        {!state.isVerifying && state.alert && state.alert.message !== DEFAULT_INFO_MESSAGE && (
+          <div className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
+            state.alert.type === 'success'
+              ? 'bg-emerald-50 border-2 border-emerald-300 text-emerald-950 shadow-2xs'
+              : state.alert.type === 'warning'
+              ? 'bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-2xs'
+              : state.alert.type === 'error'
+              ? 'bg-rose-50 border-2 border-rose-300 text-rose-950 shadow-2xs'
+              : 'bg-slate-50 border border-slate-200 text-slate-900'
+          }`}>
+            <div className="shrink-0 mt-0.5">
+              {state.alert.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
+              {state.alert.type === 'warning' && <AlertTriangle className="h-5 w-5 text-amber-600" />}
+              {state.alert.type === 'error' && <AlertTriangle className="h-5 w-5 text-rose-600" />}
+              {state.alert.type === 'info' && <Info className="h-5 w-5 text-blue-600" />}
             </div>
-          )
+            <div className="space-y-0.5 text-xs">
+              <h4 className="font-extrabold tracking-tight text-sm">{state.alert.title}</h4>
+              <p className="leading-relaxed font-medium whitespace-pre-line">{state.alert.message}</p>
+            </div>
+          </div>
         )}
 
         {/* Detailed Warnings / Messages List */}
@@ -656,6 +655,12 @@ function ExtractionGuidePanel({ zoneTitle }: { zoneTitle: string }) {
               <span>tache par client <span className="text-slate-400 text-[10px] font-normal">(tous - planning réel - regrouper par salle - trier par nom - excel - cocher toutes les cases)</span></span>
             </li>
           </ul>
+
+          <div className="mt-2.5 p-2 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-[11px] text-red-600 font-extrabold leading-snug">
+              ⚠️ Avant d'importer le fichier "tache par client", pensez à l'ouvrir, supprimer le logo et les 6 premières lignes vides puis le sauvegarder.
+            </p>
+          </div>
         </div>
       </div>
     </div>
