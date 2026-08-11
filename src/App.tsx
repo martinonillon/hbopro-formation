@@ -359,9 +359,14 @@ export default function App() {
     const seconds = String(now.getSeconds()).padStart(2, '0');
     const timeStr = `${hours}:${minutes}:${seconds}`;
 
-    const defaultAuthor = currentUser 
-      ? `${currentUser.firstName} ${currentUser.lastName} (${currentUser.username})`
-      : "MOE0226";
+    let defaultAuthor = "Martin ONILLON MINÉE";
+    if (currentUser) {
+      if (currentUser.firstName || currentUser.lastName) {
+        defaultAuthor = `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim();
+      } else if (currentUser.name) {
+        defaultAuthor = currentUser.name.replace(/\s*\([^)]*\)/g, '').trim();
+      }
+    }
 
     return {
       action,

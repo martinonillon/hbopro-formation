@@ -30,7 +30,10 @@ interface ZoneState {
   hasRun: boolean;
 }
 
-const DEFAULT_INFO_MESSAGE = `Fichiers contrats : depuis HBO v2 > Extractions > Contrats > date de début/fin > Exporter les contrats (CSV)
+const PROVINCE_INFO_MESSAGE = `Fichiers contrats : depuis HBO v2 > Extractions > Contrats > date de début/fin > Exporter les contrats (CSV)
+Fichiers planning : depuis Planete > Planning > date de début/fin > sélectionner tout le monde > lancer la sélection > menu > impression > planning > tache par client (tous - planning réel - regrouper par salle - trier par nom - excel - cocher toutes les cases)`;
+
+const ORLY_INFO_MESSAGE = `Fichiers contrats : depuis HBO > Plannings > Liste des contrats > Cliquer sur l'icone "export" > date de début/fin > Exporter les contrats
 Fichiers planning : depuis Planete > Planning > date de début/fin > sélectionner tout le monde > lancer la sélection > menu > impression > planning > tache par client (tous - planning réel - regrouper par salle - trier par nom - excel - cocher toutes les cases)`;
 
 export default function CoverageControl() {
@@ -42,7 +45,7 @@ export default function CoverageControl() {
     alert: {
       type: 'info',
       title: 'Information PROVINCE',
-      message: DEFAULT_INFO_MESSAGE
+      message: PROVINCE_INFO_MESSAGE
     },
     warningsList: [],
     xlsxBase64: null,
@@ -57,7 +60,7 @@ export default function CoverageControl() {
     alert: {
       type: 'info',
       title: 'Information ORLY',
-      message: DEFAULT_INFO_MESSAGE
+      message: ORLY_INFO_MESSAGE
     },
     warningsList: [],
     xlsxBase64: null,
@@ -72,6 +75,7 @@ export default function CoverageControl() {
     file: File | null
   ) => {
     const setState = zone === 'province' ? setProvinceState : setOrlyState;
+    const defaultInfoMessage = zone === 'province' ? PROVINCE_INFO_MESSAGE : ORLY_INFO_MESSAGE;
     setState(prev => {
       const updated = { ...prev, [fileType]: file };
       let alertMessage = prev.alert;
@@ -92,7 +96,7 @@ export default function CoverageControl() {
         alertMessage = {
           type: 'info',
           title: `Information ${zone.toUpperCase()}`,
-          message: DEFAULT_INFO_MESSAGE
+          message: defaultInfoMessage
         };
       }
 
@@ -169,6 +173,7 @@ export default function CoverageControl() {
   // Helper to reset a zone
   const handleReset = (zone: 'province' | 'orly') => {
     const setState = zone === 'province' ? setProvinceState : setOrlyState;
+    const defaultInfoMessage = zone === 'province' ? PROVINCE_INFO_MESSAGE : ORLY_INFO_MESSAGE;
     setState({
       contractsFile: null,
       planningFile: null,
@@ -176,7 +181,7 @@ export default function CoverageControl() {
       alert: {
         type: 'info',
         title: `Information ${zone.toUpperCase()}`,
-        message: DEFAULT_INFO_MESSAGE
+        message: defaultInfoMessage
       },
       warningsList: [],
       xlsxBase64: null,
@@ -401,7 +406,7 @@ function ZoneCard({
         )}
 
         {/* Alert / Main Status Banner */}
-        {!state.isVerifying && state.alert && state.alert.message !== DEFAULT_INFO_MESSAGE && (
+        {!state.isVerifying && state.alert && state.alert.message !== PROVINCE_INFO_MESSAGE && state.alert.message !== ORLY_INFO_MESSAGE && (
           <div className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
             state.alert.type === 'success'
               ? 'bg-emerald-50 border-2 border-emerald-300 text-emerald-950 shadow-2xs'
@@ -571,6 +576,8 @@ function ZoneCard({
 
 // Helper component to display clean extraction instructions
 function ExtractionGuidePanel({ zoneTitle }: { zoneTitle: string }) {
+  const isOrly = zoneTitle.toUpperCase() === 'ORLY';
+
   return (
     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2.5">
       <div className="flex items-center gap-2">
@@ -587,28 +594,57 @@ function ExtractionGuidePanel({ zoneTitle }: { zoneTitle: string }) {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
             Fichiers contrats :
           </p>
-          <ul className="space-y-0.5 text-[11px] text-slate-600 font-medium pl-1">
-            <li className="flex items-start gap-1.5">
-              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
-              <span>depuis <strong className="text-slate-800 font-semibold">HBO v2</strong></span>
-            </li>
-            <li className="flex items-start gap-1.5">
-              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
-              <span><strong className="text-slate-800 font-semibold">Extractions</strong></span>
-            </li>
-            <li className="flex items-start gap-1.5">
-              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
-              <span><strong className="text-slate-800 font-semibold">Contrats</strong></span>
-            </li>
-            <li className="flex items-start gap-1.5">
-              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
-              <span>date de début/fin</span>
-            </li>
-            <li className="flex items-start gap-1.5">
-              <span className="text-blue-500 font-bold shrink-0">&gt;</span>
-              <span className="text-blue-700 font-semibold">Exporter les contrats (CSV)</span>
-            </li>
-          </ul>
+          {isOrly ? (
+            <ul className="space-y-0.5 text-[11px] text-slate-600 font-medium pl-1">
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span>depuis <strong className="text-slate-800 font-semibold">HBO</strong></span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span><strong className="text-slate-800 font-semibold">Plannings</strong></span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span><strong className="text-slate-800 font-semibold">Liste des contrats</strong></span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span>Cliquer sur l'icone <strong className="text-slate-800 font-semibold">"export"</strong></span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span>date de début/fin</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span className="text-blue-700 font-semibold">Exporter les contrats</span>
+              </li>
+            </ul>
+          ) : (
+            <ul className="space-y-0.5 text-[11px] text-slate-600 font-medium pl-1">
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span>depuis <strong className="text-slate-800 font-semibold">HBO v2</strong></span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span><strong className="text-slate-800 font-semibold">Extractions</strong></span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span><strong className="text-slate-800 font-semibold">Contrats</strong></span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span>date de début/fin</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-blue-500 font-bold shrink-0">&gt;</span>
+                <span className="text-blue-700 font-semibold">Exporter les contrats (CSV)</span>
+              </li>
+            </ul>
+          )}
         </div>
 
         {/* Fichiers planning */}

@@ -904,6 +904,20 @@ export default function TrainingLogs({
 
             <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2">
               {(() => {
+                const formatAuthorDisplayName = (author?: string): string => {
+                  if (!author) return 'Administrateur';
+                  let clean = author.replace(/\s*\([^)]*\)/g, '').trim();
+                  if (clean.includes('@')) {
+                    clean = clean.split('@')[0].replace(/[._]/g, ' ');
+                    clean = clean.split(' ').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+                  }
+                  if (/^[A-Z0-9_-]{3,12}$/i.test(clean) && !clean.includes(' ')) {
+                    if (clean.toUpperCase() === 'MOE0226') return 'Martin ONILLON MINÉE';
+                    return 'Administrateur';
+                  }
+                  return clean || 'Administrateur';
+                };
+
                 const entries = historyLog.history && historyLog.history.length > 0 
                   ? historyLog.history 
                   : [
@@ -918,7 +932,7 @@ export default function TrainingLogs({
                   <div key={index} className="flex gap-2 text-xs text-slate-650 leading-relaxed border-l-2 border-blue-500 bg-slate-50/50 hover:bg-slate-50 p-2.5 rounded-r-lg transition-colors">
                     <div>
                       <span className="font-extrabold text-slate-800">[{entry.action}]</span>
-                      {" "}— fait le <span className="font-semibold text-slate-700">{entry.date}</span> à <span className="font-semibold text-slate-700">{entry.heure}</span> par <span className="font-bold text-blue-600">{entry.author}</span>
+                      {" "}— fait le <span className="font-semibold text-slate-700">{entry.date}</span> à <span className="font-semibold text-slate-700">{entry.heure}</span> par <span className="font-bold text-blue-600">{formatAuthorDisplayName(entry.author)}</span>
                     </div>
                   </div>
                 ));
