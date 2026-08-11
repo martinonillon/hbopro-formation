@@ -33,7 +33,8 @@ import {
   ExternalLink,
   RefreshCw,
   Printer,
-  Mail
+  Mail,
+  GraduationCap
 } from 'lucide-react';
 import { TrainingLog, Collaborator, TrainingModule } from '../types';
 import { ESCALES, ESCALE_COLORS, getEscaleStyle } from '../data/modulesData';
@@ -882,7 +883,7 @@ export default function CalendarView({
     const trainerCollab = collaborators.find(c => 
       c.id === selectedSession.idFormateur || 
       c.matricule === selectedSession.idFormateur || 
-      (c.nom && selectedSession.formateur && `${c.nom} ${c.prenom}`.toLowerCase() === selectedSession.formateur.toLowerCase())
+      (`${(c as any).nom || c.lastName || ''} ${(c as any).prenom || c.firstName || ''}`.trim().toLowerCase() === (selectedSession.formateur || '').toLowerCase())
     );
     const trainerContact = trainerCollab?.email || selectedSession.idFormateur || selectedSession.formateur || 'N/A';
 
@@ -899,8 +900,8 @@ export default function CalendarView({
 
     const participantRows = participantsList.map(log => {
       const collab = collaborators.find(c => c.id === log.collaboratorId);
-      let nom = collab?.nom || '';
-      let prenom = collab?.prenom || '';
+      let nom = (collab as any)?.nom || collab?.lastName || '';
+      let prenom = (collab as any)?.prenom || collab?.firstName || '';
       if (!nom && log.collaboratorName) {
         const parts = log.collaboratorName.trim().split(' ');
         nom = parts[0] || '';
@@ -953,6 +954,69 @@ Martin ONILLON MINÉE – Coordinateur formation
     const ccRecipients = "service_formationprovince@groupe3s.com";
 
     const mailtoUrl = `mailto:${toRecipients}?cc=${encodeURIComponent(ccRecipients)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    window.location.href = mailtoUrl;
+  };
+
+  // Handler: Send Convocation Email and set CONVOC = true automatically
+  const handleSendConvocEmail = () => {
+    if (!selectedSession) return;
+
+    const participantsList = selectedSession.participants || selectedSession.logs || [];
+
+    // 1. Automatic database & local state update for CONVOC
+    if (onBulkUpdateLogs && participantsList.length > 0) {
+      const updates = participantsList.map(log => ({
+        id: log.id,
+        changes: { convoc: true }
+      }));
+      onBulkUpdateLogs(updates);
+    }
+
+    // 2. Retrieve participant emails
+    const emails: string[] = [];
+    participantsList.forEach(log => {
+      const collab = collaborators.find(c => c.id === log.collaboratorId || c.id === (log as any).collaborator_id);
+      const email = collab?.email || (log as any).email || (log as any).collaboratorEmail;
+      if (email && typeof email === 'string' && email.trim().length > 0) {
+        const trimmed = email.trim();
+        if (!emails.includes(trimmed)) {
+          emails.push(trimmed);
+        }
+      }
+    });
+
+    const toRecipients = emails.join('; ');
+
+    // 3. Prepare variables for email
+    const dateDebutFormatted = formatDateFR(selectedSession.dateDebut);
+    const dateFinFormatted = formatDateFR(selectedSession.dateFin);
+
+    let detailsHoraires = '08:00 - 12:00';
+    if (selectedSession.heureDebut1 && selectedSession.heureFin1) {
+      detailsHoraires = `${selectedSession.heureDebut1} - ${selectedSession.heureFin1}`;
+      if (selectedSession.heureDebut2 && selectedSession.heureFin2) {
+        detailsHoraires += ` / ${selectedSession.heureDebut2} - ${selectedSession.heureFin2}`;
+      }
+    }
+
+    const subject = `Convocation formation - ${selectedSession.moduleName} - ${dateDebutFormatted}`;
+
+    const body = `Bonjour,
+
+Dans le cadre de l’exercice de vos fonctions en escale, une formation obligatoire a été programmée afin de vous permettre de développer et/ou maintenir vos compétences à jour.
+
+📌 FORMATION : ${selectedSession.moduleName} - ${selectedSession.cycle || 'N/A'}
+🗓️ Date et heure : Du ${dateDebutFormatted} au ${dateFinFormatted} (${detailsHoraires})
+📍 Lieu : ${selectedSession.lieu || 'N/A'}
+🎓 Formateur : ${selectedSession.formateur || 'N/A'} - ${selectedSession.idFormateur || 'N/A'}
+
+Vous trouverez en pièce jointe votre convocation de formation.
+🚨 Important : La participation à cette session est obligatoire. Seules les absences justifiées par un certificat seront acceptées.
+
+Vous êtes priés de vous présenter au stage dans votre tenue de travail habituelle.`;
+
+    const mailtoUrl = `mailto:${toRecipients}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     window.location.href = mailtoUrl;
   };
@@ -1285,8 +1349,8 @@ Martin ONILLON MINÉE – Coordinateur formation
           {selectedSession ? (
             <div className="divide-y divide-slate-150">
               
-              {/* Header */}
-              <div className="p-5 bg-slate-50">
+              {/* Header & Session Actions */}
+              <div className="p-5 bg-slate-50 space-y-3.5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
@@ -1309,72 +1373,105 @@ Martin ONILLON MINÉE – Coordinateur formation
                       {selectedSession.moduleName}
                     </h3>
                   </div>
+                </div>
 
-                  {/* Action Buttons (Émargement PDF, E-mail Commande, Action de masse, Modifier, Supprimer) */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    
-                    {/* Émargement PDF (Icon-only Button) */}
-                    <button
-                      onClick={handleExportEmargementPdf}
-                      disabled={isExportingEmargementPdf}
-                      className="p-2 bg-blue-50 hover:bg-[#0062FF] text-[#0062FF] hover:text-white border border-blue-200 hover:border-[#0062FF] rounded-xl transition-all cursor-pointer shadow-2xs group flex items-center justify-center disabled:opacity-60 disabled:cursor-wait"
-                      title="Générer et télécharger la feuille d'émargement PDF (format paysage)"
-                      id="session-export-pdf-btn"
-                    >
-                      {isExportingEmargementPdf ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Printer className="h-4 w-4 stroke-[2.2]" />
-                      )}
-                    </button>
-
-                    {/* Générateur d'E-mail Commande de Formation (Icon Enveloppe) */}
+                {/* Harmonized Action Buttons Grid */}
+                <div className="pt-2.5 border-t border-slate-200/80">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                    Actions de Session
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {/* 1. MAD EA */}
                     <button
                       type="button"
                       onClick={handleSendOrderEmail}
-                      className="p-2 bg-amber-50 hover:bg-amber-600 text-amber-600 hover:text-white border border-amber-200 hover:border-amber-600 rounded-xl transition-all cursor-pointer shadow-2xs group flex items-center justify-center"
-                      title="Générer l'e-mail de commande de formation pour organisme et valider MAD EA"
-                      id="session-email-generator-btn"
+                      style={{ backgroundColor: '#0062ff' }}
+                      className="px-2.5 py-2 text-white rounded-xl text-xs font-extrabold transition-all hover:opacity-90 hover:scale-[1.02] shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Mise à disposition EA"
+                      id="session-action-mad-ea"
                     >
-                      <Mail className="h-4 w-4 stroke-[2.2]" />
+                      <Mail className="h-4 w-4 shrink-0" />
+                      <span className="truncate">MAD EA</span>
                     </button>
 
-                    {!isReadOnly && (
-                      <>
-                        {/* 1. Upgrade / Action de masse (Verte) */}
-                        <button
-                          onClick={() => handleOpenBulkModal(selectedSession)}
-                          className="p-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200 hover:border-emerald-600 rounded-xl transition-all cursor-pointer shadow-2xs group flex items-center gap-1"
-                          title="Action de masse (Saisie groupée des résultats, consignes & docs)"
-                        >
-                          <Zap className="h-4 w-4 fill-current stroke-[2.2]" />
-                        </button>
+                    {/* 2. CONVOC */}
+                    <button
+                      type="button"
+                      onClick={handleSendConvocEmail}
+                      style={{ backgroundColor: '#00867a' }}
+                      className="px-2.5 py-2 text-white rounded-xl text-xs font-extrabold transition-all hover:opacity-90 hover:scale-[1.02] shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Mail de convocation"
+                      id="session-action-convoc"
+                    >
+                      <GraduationCap className="h-4 w-4 shrink-0" />
+                      <span className="truncate">CONVOC</span>
+                    </button>
 
-                        {/* 2. Modifier (Violette) */}
-                        <button
-                          onClick={() => {
-                            if (selectedSession.logs.length > 0) {
-                              onEditLog ? onEditLog(selectedSession.logs[0]) : onOpenEnrollmentOnDate(selectedSession.dateDebut, selectedSession.numSession);
-                            } else {
-                              onOpenEnrollmentOnDate(selectedSession.dateDebut, selectedSession.numSession);
-                            }
-                          }}
-                          className="p-2 bg-purple-50 hover:bg-purple-600 text-purple-600 hover:text-white border border-purple-200 hover:border-purple-600 rounded-xl transition-all cursor-pointer shadow-2xs group flex items-center gap-1"
-                          title="Modifier la session (Ouvrir le formulaire d'inscription)"
-                        >
-                          <Pencil className="h-4 w-4 stroke-[2.2]" />
-                        </button>
+                    {/* 3. EMRG */}
+                    <button
+                      type="button"
+                      onClick={handleExportEmargementPdf}
+                      disabled={isExportingEmargementPdf}
+                      style={{ backgroundColor: '#6d72db' }}
+                      className="px-2.5 py-2 text-white rounded-xl text-xs font-extrabold transition-all hover:opacity-90 hover:scale-[1.02] shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                      title="Émargement de la session"
+                      id="session-action-emrg"
+                    >
+                      {isExportingEmargementPdf ? (
+                        <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+                      ) : (
+                        <Printer className="h-4 w-4 shrink-0" />
+                      )}
+                      <span className="truncate">EMRG</span>
+                    </button>
 
-                        {/* 3. Supprimer (Rouge) */}
-                        <button
-                          onClick={() => setIsDeleteModalOpen(true)}
-                          className="p-2 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 rounded-xl transition-all cursor-pointer shadow-2xs group flex items-center gap-1"
-                          title="Supprimer la session définitivement"
-                        >
-                          <Trash2 className="h-4 w-4 stroke-[2.2]" />
-                        </button>
-                      </>
-                    )}
+                    {/* 4. ACTION DE MASSE */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenBulkModal(selectedSession)}
+                      disabled={isReadOnly}
+                      style={{ backgroundColor: '#35ffd0', color: '#0f172a' }}
+                      className="px-2 py-2 rounded-xl text-[10px] font-black transition-all hover:opacity-90 hover:scale-[1.02] shadow-2xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                      title="Actions de masse"
+                      id="session-action-bulk"
+                    >
+                      <Zap className="h-3.5 w-3.5 shrink-0 fill-current" />
+                      <span className="truncate">ACTION DE MASSE</span>
+                    </button>
+
+                    {/* 5. MODIFIER */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedSession.logs.length > 0) {
+                          onEditLog ? onEditLog(selectedSession.logs[0]) : onOpenEnrollmentOnDate(selectedSession.dateDebut, selectedSession.numSession);
+                        } else {
+                          onOpenEnrollmentOnDate(selectedSession.dateDebut, selectedSession.numSession);
+                        }
+                      }}
+                      disabled={isReadOnly}
+                      style={{ backgroundColor: '#ff751f' }}
+                      className="px-2.5 py-2 text-white rounded-xl text-xs font-extrabold transition-all hover:opacity-90 hover:scale-[1.02] shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Modifier"
+                      id="session-action-edit"
+                    >
+                      <Pencil className="h-4 w-4 shrink-0" />
+                      <span className="truncate">MODIFIER</span>
+                    </button>
+
+                    {/* 6. SUPPRIMER */}
+                    <button
+                      type="button"
+                      onClick={() => setIsDeleteModalOpen(true)}
+                      disabled={isReadOnly}
+                      style={{ backgroundColor: '#ff3131' }}
+                      className="px-2.5 py-2 text-white rounded-xl text-xs font-extrabold transition-all hover:opacity-90 hover:scale-[1.02] shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Supprimer la session définitivement"
+                      id="session-action-delete"
+                    >
+                      <Trash2 className="h-4 w-4 shrink-0" />
+                      <span className="truncate">SUPPRIMER</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1496,14 +1593,21 @@ Martin ONILLON MINÉE – Coordinateur formation
                     </div>
 
                     {/* CONVOC */}
-                    <div className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-between ${
-                      selectedSession.convoc 
-                        ? 'bg-violet-50 border-violet-200 text-violet-900 shadow-2xs' 
-                        : 'bg-slate-100 border-slate-200 text-slate-400'
-                    }`}>
-                      <span>CONVOC</span>
+                    <div 
+                      onClick={handleSendConvocEmail}
+                      className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-between cursor-pointer transition-all hover:scale-[1.02] ${
+                        selectedSession.convoc 
+                          ? 'bg-teal-50 border-teal-200 text-teal-900 shadow-2xs' 
+                          : 'bg-slate-100 border-slate-200 text-slate-500 hover:border-teal-300'
+                      }`}
+                      title="Cliquer pour générer l'e-mail de convocation et valider CONVOC"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <GraduationCap className="h-3.5 w-3.5 text-[#00867a] shrink-0" />
+                        <span className="truncate">CONVOC</span>
+                      </div>
                       {selectedSession.convoc ? (
-                        <CheckCircle2 className="h-4 w-4 text-violet-600 shrink-0" />
+                        <CheckCircle2 className="h-4 w-4 text-[#00867a] shrink-0" />
                       ) : (
                         <XCircle className="h-4 w-4 text-slate-300 shrink-0" />
                       )}
