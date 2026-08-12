@@ -111,6 +111,9 @@ export default function TrainingLogs({
         } else {
           setFilterResult(initialFilters.resultat);
         }
+      } else if (initialFilters.consigne) {
+        // If consigne filter is passed (e.g. "À relancer"), reset resultat filter to ALL ("Tout")
+        setFilterResult('ALL');
       } else {
         setFilterResult('EN_COURS_A_TRAITER');
       }

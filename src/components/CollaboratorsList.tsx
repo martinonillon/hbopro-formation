@@ -72,6 +72,94 @@ export default function CollaboratorsList({
   const [selectedEscale, setSelectedEscale] = useState('ALL');
   const [selectedService, setSelectedService] = useState('ALL');
   
+  // Deduplication Modal State
+  const [isDeduplicateModalOpen, setIsDeduplicateModalOpen] = useState(false);
+  const [duplicateGroups, setDuplicateGroups] = useState<{ key: string; name: string; items: Collaborator[] }[]>([]);
+  const [selectedCollabIdsToDelete, setSelectedCollabIdsToDelete] = useState<Set<string>>(new Set());
+  const [noDuplicatesNotice, setNoDuplicatesNotice] = useState(false);
+
+  const handleAnalyzeDuplicates = () => {
+    const norm = (str?: string) => (str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    const groupsMap = new Map<string, { key: string; name: string; items: Collaborator[] }>();
+
+    collaborators.forEach(collab => {
+      const lName = (collab.lastName || (collab as any).nom || '').trim();
+      const fName = (collab.firstName || (collab as any).prenom || '').trim();
+      const normKey = `${norm(lName)}_${norm(fName)}`;
+
+      if (!normKey || normKey === '_') return;
+
+      if (!groupsMap.has(normKey)) {
+        groupsMap.set(normKey, {
+          key: normKey,
+          name: `${lName.toUpperCase()} ${fName}`,
+          items: [collab]
+        });
+      } else {
+        groupsMap.get(normKey)!.items.push(collab);
+      }
+    });
+
+    const dups = Array.from(groupsMap.values()).filter(g => g.items.length > 1);
+
+    if (dups.length === 0) {
+      setNoDuplicatesNotice(true);
+      setTimeout(() => setNoDuplicatesNotice(false), 4000);
+      return;
+    }
+
+    const defaultToDelete = new Set<string>();
+    dups.forEach(group => {
+      let maxLogs = -1;
+      let primaryId = group.items[0].id;
+
+      group.items.forEach(item => {
+        const logCount = trainingLogs.filter(l => l.collaboratorId === item.id).length;
+        if (logCount > maxLogs) {
+          maxLogs = logCount;
+          primaryId = item.id;
+        }
+      });
+
+      group.items.forEach(item => {
+        if (item.id !== primaryId) {
+          defaultToDelete.add(item.id);
+        }
+      });
+    });
+
+    setDuplicateGroups(dups);
+    setSelectedCollabIdsToDelete(defaultToDelete);
+    setIsDeduplicateModalOpen(true);
+  };
+
+  const toggleCollabDelete = (id: string) => {
+    setSelectedCollabIdsToDelete(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleConfirmDeduplication = () => {
+    if (selectedCollabIdsToDelete.size === 0) {
+      setIsDeduplicateModalOpen(false);
+      return;
+    }
+
+    selectedCollabIdsToDelete.forEach(collabId => {
+      onDeleteCollaborator(collabId);
+    });
+
+    setIsDeduplicateModalOpen(false);
+    setSelectedCollabIdsToDelete(new Set());
+  };
+  
   // Selected Collab Detail view with synchronization
   const [selectedCollabId, setSelectedCollabIdState] = useState<string | null>(propSelectedCollabId || null);
   
@@ -961,6 +1049,15 @@ export default function CollaboratorsList({
             <h3 className="font-semibold text-slate-900 text-sm">Collaborateurs ({filteredCollabs.length})</h3>
             {!isReadOnly && (
               <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleAnalyzeDuplicates}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all border border-amber-200 cursor-pointer shadow-2xs"
+                  id="deduplicate-collabs-btn"
+                  title="Détecter et supprimer les fiches en doublon (même nom et prénom)"
+                >
+                  <Copy className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Supprimer les doublons</span>
+                </button>
                 {onClearAllCollaborators && (
                   <button
                     onClick={() => setIsConfirmClearAllOpen(true)}
@@ -982,6 +1079,13 @@ export default function CollaboratorsList({
               </div>
             )}
           </div>
+
+          {noDuplicatesNotice && (
+            <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-2 animate-fade-in">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>Aucun doublon trouvé (aucun collaborateur ne partage les mêmes nom et prénom).</span>
+            </div>
+          )}
 
           {/* Search */}
           <div className="relative">

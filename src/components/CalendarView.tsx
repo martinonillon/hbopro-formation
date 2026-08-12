@@ -418,7 +418,7 @@ export default function CalendarView({
   };
 
   // Safe file reader & validator helper for PDFs
-  const processPdfFile = (file: File, onSuccess: (dataUrl: string, fileName: string) => void) => {
+  const processPdfFile = async (file: File, onSuccess: (dataUrl: string, fileName: string) => void) => {
     setUploadError(null);
     if (!file) return;
 
@@ -429,14 +429,28 @@ export default function CalendarView({
       return;
     }
 
-    // Validate size limit (10MB max to prevent browser storage/memory crash)
-    const MAX_SIZE_MB = 10;
+    // Validate size limit (15MB max to prevent browser storage/memory crash)
+    const MAX_SIZE_MB = 15;
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
       setUploadError(`Fichier trop volumineux (${(file.size / (1024 * 1024)).toFixed(1)} Mo). La taille maximale autorisée est de ${MAX_SIZE_MB} Mo.`);
       return;
     }
 
     try {
+      // 1. Attempt upload to Supabase Storage bucket ('emargements') for persistent cloud URL
+      let storageUrl: string | null = null;
+      try {
+        storageUrl = await uploadPdfToSupabaseStorage(file.name, file);
+      } catch (err) {
+        console.warn("Erreur lors du téléversement sur Supabase Storage, bascule sur encodage local:", err);
+      }
+
+      if (storageUrl) {
+        onSuccess(storageUrl, file.name);
+        return;
+      }
+
+      // 2. Fallback to base64 Data URL if storage upload is unavailable
       const reader = new FileReader();
       reader.onload = () => {
         try {
@@ -2585,7 +2599,7 @@ Vous êtes priés de vous présenter au stage dans votre tenue de travail habitu
                             <div className="w-3.5 h-3.5 border border-slate-400 rounded-xs mx-auto"></div>
                           </td>
                           <td className="px-1.5 py-1 border border-slate-300 text-slate-600 text-[10px]">
-                            {log?.notes ? log.notes : ''}
+                            {/* Strictly empty as requested by EMRG PDF template rules */}
                           </td>
                         </tr>
                       );

@@ -362,6 +362,10 @@ export function sanitizeItemForTable(tableName: string, item: any): Record<strin
     clean.emrgFileUrl = emrgUrl;
     clean.emrg_file_url = emrgUrl;
 
+    const emrgName = strOrNull(item.emrgFileName || item.emrg_file_name);
+    clean.emrgFileName = emrgName;
+    clean.emrg_file_name = emrgName;
+
     const commPaye = strOrNull(item.commentairePaye || item.commentaire_paye);
     clean.commentairePaye = commPaye;
     clean.commentaire_paye = commPaye;
