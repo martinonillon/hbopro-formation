@@ -60,7 +60,7 @@ export function syncSupabaseTable<T extends { id: string }>(
         const { data, error } = await supabase.from('training_logs').select('*');
         if (error) {
           console.warn(`Supabase select error on training_logs:`, error.message);
-          if (onError) {
+          if (onError && !isNonFatalSupabaseError(error)) {
             onError(`Impossible de lire la table Supabase 'training_logs': ${error.message}`);
           }
           return;
@@ -81,7 +81,7 @@ export function syncSupabaseTable<T extends { id: string }>(
       const { data, error } = await supabase.from(tableName).select('*');
       if (error) {
         console.warn(`Supabase select error on ${tableName}:`, error.message);
-        if (onError) {
+        if (onError && !isNonFatalSupabaseError(error)) {
           onError(`Impossible de lire la table Supabase '${tableName}': ${error.message}`);
         }
         return;
@@ -236,6 +236,37 @@ export function extractMissingColumnFromError(error: any): string | null {
   if (match4 && match4[1]) return match4[1];
 
   return null;
+}
+
+/**
+ * Checks if a Supabase error is non-fatal (e.g. table missing from schema cache, permission denied / RLS policy).
+ * In those cases, the app continues using primary local / Firestore storage without popping alarming error banners.
+ */
+export function isNonFatalSupabaseError(error: any): boolean {
+  if (!error) return false;
+  const str = `${error.message || ''} ${error.details || ''} ${error.hint || ''} ${error.code || ''}`.toLowerCase();
+  
+  if (
+    str.includes("could not find the table") ||
+    str.includes("schema cache") ||
+    str.includes("relation") && str.includes("does not exist") ||
+    error.code === 'PGRST204' ||
+    error.code === '42P01'
+  ) {
+    return true;
+  }
+
+  if (
+    str.includes("permission denied") ||
+    str.includes("row-level security") ||
+    str.includes("rls") ||
+    error.code === '42501' ||
+    error.status === 403
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -465,16 +496,20 @@ export async function clearSupabaseTable(
   try {
     const { error } = await supabase.from(tableName).delete().not('id', 'is', null);
     if (error) {
-      console.error(`Supabase clear error on ${tableName}:`, error.message);
-      const msg = `Erreur de vidage Supabase (table '${tableName}'): ${error.message}`;
-      if (onError) onError(msg);
+      console.warn(`Supabase clear error on ${tableName}:`, error.message);
+      if (onError && !isNonFatalSupabaseError(error)) {
+        const msg = `Erreur de vidage Supabase (table '${tableName}'): ${error.message}`;
+        onError(msg);
+      }
       return false;
     }
     return true;
   } catch (err: any) {
     console.error(`Exception clearing Supabase table ${tableName}:`, err);
-    const msg = `Exception réseau Supabase (table '${tableName}'): ${err?.message || String(err)}`;
-    if (onError) onError(msg);
+    if (onError && !isNonFatalSupabaseError(err)) {
+      const msg = `Exception réseau Supabase (table '${tableName}'): ${err?.message || String(err)}`;
+      onError(msg);
+    }
     return false;
   }
 }
@@ -490,16 +525,20 @@ export async function deleteFromSupabase(
   try {
     const { error } = await supabase.from(tableName).delete().eq('id', itemId);
     if (error) {
-      console.error(`Supabase delete error on ${tableName}:`, error.message);
-      const msg = `Erreur de suppression Supabase (table '${tableName}'): ${error.message}`;
-      if (onError) onError(msg);
+      console.warn(`Supabase delete error on ${tableName}:`, error.message);
+      if (onError && !isNonFatalSupabaseError(error)) {
+        const msg = `Erreur de suppression Supabase (table '${tableName}'): ${error.message}`;
+        onError(msg);
+      }
       return false;
     }
     return true;
   } catch (err: any) {
     console.error(`Exception deleting from Supabase ${tableName}:`, err);
-    const msg = `Exception réseau Supabase (table '${tableName}'): ${err?.message || String(err)}`;
-    if (onError) onError(msg);
+    if (onError && !isNonFatalSupabaseError(err)) {
+      const msg = `Exception réseau Supabase (table '${tableName}'): ${err?.message || String(err)}`;
+      onError(msg);
+    }
     return false;
   }
 }
@@ -566,9 +605,16 @@ export async function saveBulkToSupabase<T extends { id: string }>(
           continue;
         }
 
+        // Check if error is non-fatal (missing table / permissions)
+        if (isNonFatalSupabaseError(error)) {
+          console.warn(`[Supabase Fallback] Non-fatal Supabase error on table '${tableName}': ${error.message}. Skipping Supabase sync for this item.`);
+          allSuccessful = false;
+          break;
+        }
+
         // If not a missing column error (e.g. auth error, constraint failure, connection issue):
         const errDetail = `${error.message}${error.details ? ` (${error.details})` : ''}${error.hint ? ` [Hint: ${error.hint}]` : ''}`;
-        if (!firstErrorMessage) {
+        if (!firstErrorMessage && !isNonFatalSupabaseError(error)) {
           firstErrorMessage = errDetail;
         }
         allSuccessful = false;
@@ -576,7 +622,7 @@ export async function saveBulkToSupabase<T extends { id: string }>(
       } catch (err: any) {
         console.error(`[Supabase Exception] Exception bulk saving to table '${tableName}':`, err);
         const excMsg = err?.message || String(err);
-        if (!firstErrorMessage) {
+        if (!firstErrorMessage && !isNonFatalSupabaseError(err)) {
           firstErrorMessage = excMsg;
         }
         allSuccessful = false;
@@ -592,8 +638,8 @@ export async function saveBulkToSupabase<T extends { id: string }>(
     }
   }
 
-  if (!allSuccessful && onError) {
-    onError(firstErrorMessage || `Erreur d'enregistrement Supabase sur table '${tableName}'`);
+  if (!allSuccessful && onError && firstErrorMessage) {
+    onError(firstErrorMessage);
   }
 
   return allSuccessful;

@@ -74,64 +74,219 @@ export default function CollaboratorsList({
   
   // Deduplication Modal State
   const [isDeduplicateModalOpen, setIsDeduplicateModalOpen] = useState(false);
-  const [duplicateGroups, setDuplicateGroups] = useState<{ key: string; name: string; items: Collaborator[] }[]>([]);
+  const [duplicateGroups, setDuplicateGroups] = useState<{
+    id: string;
+    displayName: string;
+    matchReason: string;
+    primaryId: string;
+    items: Collaborator[];
+  }[]>([]);
   const [selectedCollabIdsToDelete, setSelectedCollabIdsToDelete] = useState<Set<string>>(new Set());
-  const [noDuplicatesNotice, setNoDuplicatesNotice] = useState(false);
 
   const handleAnalyzeDuplicates = () => {
-    const norm = (str?: string) => (str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
-    const groupsMap = new Map<string, { key: string; name: string; items: Collaborator[] }>();
+    const normStr = (str?: string) => 
+      (str || '')
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
 
-    collaborators.forEach(collab => {
-      const lName = (collab.lastName || (collab as any).nom || '').trim();
-      const fName = (collab.firstName || (collab as any).prenom || '').trim();
-      const normKey = `${norm(lName)}_${norm(fName)}`;
+    const stripStr = (str?: string) => 
+      normStr(str).replace(/[^a-z0-9]/g, "");
 
-      if (!normKey || normKey === '_') return;
+    const levenshtein = (a: string, b: string): number => {
+      if (a.length === 0) return b.length;
+      if (b.length === 0) return a.length;
+      const matrix = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+      for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+      for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + cost
+          );
+        }
+      }
+      return matrix[a.length][b.length];
+    };
 
-      if (!groupsMap.has(normKey)) {
-        groupsMap.set(normKey, {
-          key: normKey,
-          name: `${lName.toUpperCase()} ${fName}`,
-          items: [collab]
+    const checkSimilarity = (c1: Collaborator, c2: Collaborator): { isMatch: boolean; reason: string } => {
+      const l1 = (c1.lastName || (c1 as any).nom || '').trim();
+      const f1 = (c1.firstName || (c1 as any).prenom || '').trim();
+      const l2 = (c2.lastName || (c2 as any).nom || '').trim();
+      const f2 = (c2.firstName || (c2 as any).prenom || '').trim();
+
+      const nl1 = normStr(l1);
+      const nf1 = normStr(f1);
+      const nl2 = normStr(l2);
+      const nf2 = normStr(f2);
+
+      if (!nl1 && !nf1) return { isMatch: false, reason: '' };
+
+      // 1. Exact match
+      if (nl1 === nl2 && nf1 === nf2) {
+        return { isMatch: true, reason: 'Nom et prénom identiques' };
+      }
+
+      // 2. Inverted name/firstname
+      if (nl1 === nf2 && nf1 === nl2 && (nl1.length > 2 || nf1.length > 2)) {
+        return { isMatch: true, reason: 'Nom et prénom inversés' };
+      }
+
+      // 3. Same Email (if non-empty)
+      if (c1.email && c2.email && normStr(c1.email) === normStr(c2.email) && c1.email.includes('@')) {
+        return { isMatch: true, reason: 'Adresse e-mail identique' };
+      }
+
+      // 4. Same Matricule (if non-empty)
+      if (c1.matricule && c2.matricule && normStr(c1.matricule) === normStr(c2.matricule) && c1.matricule.trim().length >= 3) {
+        return { isMatch: true, reason: 'Matricule identique' };
+      }
+
+      // 5. Punctuation/space variant
+      const full1 = stripStr(l1 + f1);
+      const full2 = stripStr(l2 + f2);
+      const full2Inverted = stripStr(f2 + l2);
+
+      if (full1 && full1 === full2) {
+        return { isMatch: true, reason: 'Variante de ponctuation/espace' };
+      }
+      if (full1 && full1 === full2Inverted) {
+        return { isMatch: true, reason: 'Nom/prénom inversé avec ponctuation' };
+      }
+
+      // 6. Fuzzy match (Levenshtein)
+      if (full1.length >= 4 && full2.length >= 4) {
+        const dist = levenshtein(full1, full2);
+        const maxLen = Math.max(full1.length, full2.length);
+        if ((maxLen >= 6 && dist <= 2) || (maxLen < 6 && dist <= 1)) {
+          return { isMatch: true, reason: 'Nom/prénom presque identique (orthographe)' };
+        }
+        const distInv = levenshtein(full1, full2Inverted);
+        if ((maxLen >= 6 && distInv <= 2) || (maxLen < 6 && distInv <= 1)) {
+          return { isMatch: true, reason: 'Nom/prénom presque identique inversé' };
+        }
+      }
+
+      return { isMatch: false, reason: '' };
+    };
+
+    const n = collaborators.length;
+    const parent = Array.from({ length: n }, (_, i) => i);
+    const find = (i: number): number => {
+      if (parent[i] === i) return i;
+      return parent[i] = find(parent[i]);
+    };
+    const union = (i: number, j: number) => {
+      const rootI = find(i);
+      const rootJ = find(j);
+      if (rootI !== rootJ) {
+        parent[rootI] = rootJ;
+      }
+    };
+
+    const matchReasonsMap = new Map<string, string>();
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const { isMatch, reason } = checkSimilarity(collaborators[i], collaborators[j]);
+        if (isMatch) {
+          union(i, j);
+          matchReasonsMap.set(`${collaborators[i].id}_${collaborators[j].id}`, reason);
+        }
+      }
+    }
+
+    const groupsMap = new Map<number, Collaborator[]>();
+    for (let i = 0; i < n; i++) {
+      const root = find(i);
+      if (!groupsMap.has(root)) {
+        groupsMap.set(root, []);
+      }
+      groupsMap.get(root)!.push(collaborators[i]);
+    }
+
+    const groups: {
+      id: string;
+      displayName: string;
+      matchReason: string;
+      primaryId: string;
+      items: Collaborator[];
+    }[] = [];
+    let gIdx = 1;
+
+    const defaultToDelete = new Set<string>();
+
+    groupsMap.forEach((items) => {
+      if (items.length > 1) {
+        let reason = 'Fiches similaires identifiées';
+        for (let a = 0; a < items.length; a++) {
+          for (let b = a + 1; b < items.length; b++) {
+            const k1 = `${items[a].id}_${items[b].id}`;
+            const k2 = `${items[b].id}_${items[a].id}`;
+            if (matchReasonsMap.has(k1)) { reason = matchReasonsMap.get(k1)!; break; }
+            if (matchReasonsMap.has(k2)) { reason = matchReasonsMap.get(k2)!; break; }
+          }
+        }
+
+        // Default primary = item with most logs
+        let maxLogs = -1;
+        let primaryId = items[0].id;
+        items.forEach(item => {
+          const logCount = trainingLogs.filter(l => l.collaboratorId === item.id).length;
+          if (logCount > maxLogs) {
+            maxLogs = logCount;
+            primaryId = item.id;
+          }
         });
-      } else {
-        groupsMap.get(normKey)!.items.push(collab);
+
+        items.forEach(item => {
+          if (item.id !== primaryId) {
+            defaultToDelete.add(item.id);
+          }
+        });
+
+        const displayLName = (items[0].lastName || (items[0] as any).nom || '').toUpperCase();
+        const displayFName = items[0].firstName || (items[0] as any).prenom || '';
+
+        groups.push({
+          id: `dup-group-${gIdx++}`,
+          displayName: `${displayLName} ${displayFName}`.trim(),
+          matchReason: reason,
+          primaryId,
+          items
+        });
       }
     });
 
-    const dups = Array.from(groupsMap.values()).filter(g => g.items.length > 1);
-
-    if (dups.length === 0) {
-      setNoDuplicatesNotice(true);
-      setTimeout(() => setNoDuplicatesNotice(false), 4000);
-      return;
-    }
-
-    const defaultToDelete = new Set<string>();
-    dups.forEach(group => {
-      let maxLogs = -1;
-      let primaryId = group.items[0].id;
-
-      group.items.forEach(item => {
-        const logCount = trainingLogs.filter(l => l.collaboratorId === item.id).length;
-        if (logCount > maxLogs) {
-          maxLogs = logCount;
-          primaryId = item.id;
-        }
-      });
-
-      group.items.forEach(item => {
-        if (item.id !== primaryId) {
-          defaultToDelete.add(item.id);
-        }
-      });
-    });
-
-    setDuplicateGroups(dups);
+    setDuplicateGroups(groups);
     setSelectedCollabIdsToDelete(defaultToDelete);
     setIsDeduplicateModalOpen(true);
+  };
+
+  const handleSelectPrimaryInGroup = (groupId: string, newPrimaryId: string) => {
+    setDuplicateGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      return { ...g, primaryId: newPrimaryId };
+    }));
+
+    setSelectedCollabIdsToDelete(prev => {
+      const next = new Set(prev);
+      const grp = duplicateGroups.find(g => g.id === groupId);
+      if (grp) {
+        grp.items.forEach(item => {
+          if (item.id === newPrimaryId) {
+            next.delete(item.id);
+          } else {
+            next.add(item.id);
+          }
+        });
+      }
+      return next;
+    });
   };
 
   const toggleCollabDelete = (id: string) => {
@@ -146,14 +301,82 @@ export default function CollaboratorsList({
     });
   };
 
-  const handleConfirmDeduplication = () => {
+  const handleMergeGroup = (group: { id: string; primaryId: string; items: Collaborator[] }) => {
+    const primary = group.items.find(i => i.id === group.primaryId) || group.items[0];
+    const secondaries = group.items.filter(i => i.id !== primary.id);
+
+    if (secondaries.length === 0) return;
+
+    // 1. Reassign all training logs from secondary collaborators to primary
+    const secondaryIds = new Set(secondaries.map(s => s.id));
+    const logsToReassign = trainingLogs.filter(l => secondaryIds.has(l.collaboratorId));
+
+    logsToReassign.forEach(log => {
+      onUpdateTrainingStatus(log.id, {
+        collaboratorId: primary.id,
+        collaboratorName: `${primary.firstName} ${primary.lastName}`
+      });
+    });
+
+    // 2. Merge missing info into primary collaborator
+    let updatedPrimary = { ...primary };
+    let primaryModified = false;
+
+    secondaries.forEach(sec => {
+      if (!updatedPrimary.email && sec.email) {
+        updatedPrimary.email = sec.email;
+        primaryModified = true;
+      }
+      if (!updatedPrimary.escale && sec.escale) {
+        updatedPrimary.escale = sec.escale;
+        primaryModified = true;
+      }
+      if (!updatedPrimary.service && sec.service) {
+        updatedPrimary.service = sec.service;
+        primaryModified = true;
+      }
+      if (!updatedPrimary.phone && sec.phone) {
+        updatedPrimary.phone = sec.phone;
+        primaryModified = true;
+      }
+      if (!updatedPrimary.matricule && sec.matricule) {
+        updatedPrimary.matricule = sec.matricule;
+        primaryModified = true;
+      }
+      if (!(updatedPrimary as any).numSecu && (sec as any).numSecu) {
+        (updatedPrimary as any).numSecu = (sec as any).numSecu;
+        primaryModified = true;
+      }
+    });
+
+    if (primaryModified && onUpdateCollaborator) {
+      onUpdateCollaborator(updatedPrimary);
+    }
+
+    // 3. Delete secondary collaborators
+    secondaries.forEach(sec => {
+      onDeleteCollaborator(sec.id);
+    });
+
+    // 4. Update state
+    setDuplicateGroups(prev => prev.filter(g => g.id !== group.id));
+  };
+
+  const handleMergeAllGroups = () => {
+    duplicateGroups.forEach(group => {
+      handleMergeGroup(group);
+    });
+    setIsDeduplicateModalOpen(false);
+  };
+
+  const handleDeleteSelected = () => {
     if (selectedCollabIdsToDelete.size === 0) {
       setIsDeduplicateModalOpen(false);
       return;
     }
 
-    selectedCollabIdsToDelete.forEach(collabId => {
-      onDeleteCollaborator(collabId);
+    selectedCollabIdsToDelete.forEach(id => {
+      onDeleteCollaborator(id);
     });
 
     setIsDeduplicateModalOpen(false);
@@ -1080,12 +1303,7 @@ export default function CollaboratorsList({
             )}
           </div>
 
-          {noDuplicatesNotice && (
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-lg flex items-center gap-2 animate-fade-in">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span>Aucun doublon trouvé (aucun collaborateur ne partage les mêmes nom et prénom).</span>
-            </div>
-          )}
+
 
           {/* Search */}
           <div className="relative">
@@ -2469,6 +2687,218 @@ export default function CollaboratorsList({
                 Oui, tout supprimer
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deduplication & Fusion Modal */}
+      {isDeduplicateModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="deduplicate-collabs-modal">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[88vh] flex flex-col overflow-hidden text-left">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 bg-amber-50/60 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl">
+                  <Copy className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Analyse & Déduplication des fiches intérimaires</h3>
+                  <p className="text-xs text-slate-500">
+                    {duplicateGroups.length > 0 
+                      ? `${duplicateGroups.length} groupe(s) de doublons détecté(s) parmi ${collaborators.length} collaborateurs`
+                      : `Analyse terminée pour ${collaborators.length} collaborateurs`
+                    }
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsDeduplicateModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {duplicateGroups.length === 0 ? (
+                <div className="py-12 text-center space-y-3">
+                  <div className="mx-auto w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </div>
+                  <h4 className="text-base font-bold text-slate-800">Aucun doublon détecté</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    Toutes les {collaborators.length} fiches d'intérimaires ont été analysées (noms, prénoms, orthographes proches, escales, e-mails). Aucune entrée en double n'a été identifiée.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 leading-relaxed space-y-1">
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      Instructions pour la fusion ou suppression :
+                    </p>
+                    <p>
+                      Pour chaque groupe, la <strong>Fiche Principale (Conservée)</strong> est pré-sélectionnée (celle possédant le plus de formations enregistrées).
+                      Lors d'une <strong>Fusion</strong>, l'historique de toutes les formations rattachées aux fiches secondaires sera transféré sur la fiche principale avant la suppression des doublons.
+                    </p>
+                  </div>
+
+                  {duplicateGroups.map((group, gIdx) => (
+                    <div key={group.id || gIdx} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs space-y-0">
+                      <div className="bg-slate-100/90 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-slate-600" />
+                          <span className="font-extrabold text-slate-900 text-sm">
+                            {group.displayName}
+                          </span>
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
+                            {group.matchReason}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleMergeGroup(group)}
+                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
+                            title="Transférer toutes les formations vers la fiche principale et supprimer les fiches secondaires"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Fusionner ce groupe</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="divide-y divide-slate-100">
+                        {group.items.map(collab => {
+                          const isPrimary = collab.id === group.primaryId;
+                          const isMarkedDelete = selectedCollabIdsToDelete.has(collab.id);
+                          const logCount = trainingLogs.filter(l => l.collaboratorId === collab.id).length;
+
+                          return (
+                            <div 
+                              key={collab.id} 
+                              className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                                isPrimary ? 'bg-emerald-50/40 border-l-4 border-l-emerald-500' : 'bg-slate-50/30'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3 min-w-0">
+                                <input 
+                                  type="radio"
+                                  name={`primary-${group.id}`}
+                                  checked={isPrimary}
+                                  onChange={() => handleSelectPrimaryInGroup(group.id, collab.id)}
+                                  className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                                  title="Définir comme Fiche Principale (Conservée)"
+                                />
+                                <div className="min-w-0 space-y-1 text-xs">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold text-slate-900 text-sm">
+                                      {collab.firstName} {collab.lastName}
+                                    </span>
+                                    {isPrimary ? (
+                                      <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                        Fiche Principale (Conservée)
+                                      </span>
+                                    ) : (
+                                      <span className="bg-slate-200 text-slate-700 font-semibold text-[10px] px-2 py-0.5 rounded-full">
+                                        Fiche Secondaire
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Details grid: Nom/Prénom/Escale/Mail */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-slate-600 text-[11px] pt-1">
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                      <span>Escale: <strong className="text-slate-800">{collab.escale || 'Non renseignée'}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                      <span>Email: <strong className="text-slate-800">{collab.email || 'Non renseigné'}</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <Briefcase className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                      <span>Service: <strong className="text-slate-800">{collab.service || 'N/A'}</strong></span>
+                                    </div>
+                                    {collab.matricule && (
+                                      <div className="flex items-center gap-1.5 truncate">
+                                        <Tag className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                        <span>Matricule: <strong className="text-slate-800">{collab.matricule}</strong></span>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <BookOpen className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                      <span>Formations: <strong className="text-blue-700 font-bold">{logCount} enregistrée(s)</strong></span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {!isPrimary && (
+                                <div className="shrink-0 flex items-center gap-2 self-end sm:self-center">
+                                  <label className="flex items-center gap-1.5 text-xs text-rose-700 font-medium cursor-pointer">
+                                    <input 
+                                      type="checkbox"
+                                      checked={isMarkedDelete}
+                                      onChange={() => toggleCollabDelete(collab.id)}
+                                      className="h-4 w-4 text-rose-600 focus:ring-rose-500 rounded-sm cursor-pointer"
+                                    />
+                                    <span>Marquer pour suppression</span>
+                                  </label>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div>
+                {duplicateGroups.length > 0 && (
+                  <span className="text-xs text-slate-600 font-medium">
+                    <strong className="text-blue-600 font-bold">{duplicateGroups.length}</strong> groupe(s) en attente d'action
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsDeduplicateModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                >
+                  {duplicateGroups.length === 0 ? 'Fermer' : 'Annuler'}
+                </button>
+
+                {duplicateGroups.length > 0 && (
+                  <>
+                    <button
+                      onClick={handleDeleteSelected}
+                      disabled={selectedCollabIdsToDelete.size === 0}
+                      className="px-4 py-2 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 disabled:opacity-50 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Supprimer les fiches cochées ({selectedCollabIdsToDelete.size})</span>
+                    </button>
+
+                    <button
+                      onClick={handleMergeAllGroups}
+                      className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Tout fusionner automatiquement</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       )}

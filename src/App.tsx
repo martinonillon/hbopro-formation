@@ -74,6 +74,17 @@ export default function App() {
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
 
   const handleSupabaseWriteError = (errMsg: string) => {
+    if (
+      !errMsg ||
+      errMsg.includes("Could not find the table") ||
+      errMsg.includes("permission denied") ||
+      errMsg.includes("schema cache") ||
+      errMsg.includes("42501") ||
+      errMsg.includes("42P01")
+    ) {
+      console.warn("Supabase write error suppressed (non-fatal):", errMsg);
+      return;
+    }
     setSupabaseError(errMsg);
     addEvent(`⚠️ Erreur Supabase : ${errMsg}`, 'warning');
   };
@@ -1443,7 +1454,7 @@ export default function App() {
               </div>
               <div className="text-left">
                 <p className="text-xs font-bold text-slate-900 leading-tight">
-                  {currentUser.firstName} {currentUser.lastName} <span className="text-[#0062FF] font-mono font-extrabold ml-0.5">({currentUser.username})</span>
+                  {currentUser.firstName} {currentUser.lastName}
                 </p>
                 <p className="text-[10px] text-slate-500 font-medium leading-none mt-0.5">{currentUser.role}</p>
               </div>
