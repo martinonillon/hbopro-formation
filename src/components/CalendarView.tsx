@@ -163,16 +163,19 @@ export default function CalendarView({
   }, []);
 
   // Helper to calculate list of distinct training dates for a session
-  const getTrainingDaysList = (dateDebut?: string, dateFin?: string): string[] => {
-    if (!dateDebut) return [new Date().toISOString().split('T')[0]];
-    if (!dateFin || dateFin === dateDebut) return [dateDebut];
+  const getTrainingDaysList = (dateDebut?: string | any, dateFin?: string): string[] => {
+    let startStr = typeof dateDebut === 'object' && dateDebut !== null ? dateDebut.dateDebut : dateDebut;
+    let endStr = typeof dateDebut === 'object' && dateDebut !== null ? dateDebut.dateFin : dateFin;
+
+    if (!startStr) return [new Date().toISOString().split('T')[0]];
+    if (!endStr || endStr === startStr) return [startStr];
 
     const days: string[] = [];
-    const start = new Date(`${dateDebut}T00:00:00`);
-    const end = new Date(`${dateFin}T00:00:00`);
+    const start = new Date(`${startStr}T00:00:00`);
+    const end = new Date(`${endStr}T00:00:00`);
 
     if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
-      return [dateDebut];
+      return [startStr];
     }
 
     const curr = new Date(start);
@@ -187,7 +190,7 @@ export default function CalendarView({
       count++;
     }
 
-    return days.length > 0 ? days : [dateDebut];
+    return days.length > 0 ? days : [startStr];
   };
 
   const modernColorToRgbStr = (cssText: string): string => {
@@ -2447,7 +2450,7 @@ Vous êtes priés de vous présenter au stage dans votre tenue de travail habitu
 
       {/* Hidden Printable Container for Landscape A4 Émargement PDF (Multi-page / Per day support) */}
       {selectedSession && (() => {
-        const daysList = getTrainingDaysList(selectedSession);
+        const daysList = getTrainingDaysList(selectedSession.dateDebut, selectedSession.dateFin);
 
         return daysList.map((dayStr, dIdx) => (
           <div 
@@ -2474,11 +2477,12 @@ Vous êtes priés de vous présenter au stage dans votre tenue de travail habitu
                   <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">
                     Émargement de Formation
                   </h1>
-                  {daysList.length > 1 && (
-                    <span className="inline-block bg-sky-100 text-sky-900 text-[11px] font-black px-2 py-0.5 rounded mt-0.5">
-                      Jour {dIdx + 1} / {daysList.length} — {formatDateFR(dayStr)}
-                    </span>
-                  )}
+                  <span className="inline-block bg-sky-100 text-sky-900 text-[11px] font-black px-2 py-0.5 rounded mt-0.5">
+                    {daysList.length > 1 
+                      ? `Jour ${dIdx + 1} / ${daysList.length} — ${formatDateFR(dayStr)}` 
+                      : `Date : ${formatDateFR(dayStr || selectedSession.dateDebut)}`
+                    }
+                  </span>
                 </div>
               </div>
               <div className="text-right border-l-2 border-slate-300 pl-4">
@@ -2512,7 +2516,7 @@ Vous êtes priés de vous présenter au stage dans votre tenue de travail habitu
                 <div>
                   <span className="font-semibold text-slate-500 text-[10px] uppercase block mb-0.5">Date du jour :</span>
                   <span className="font-bold text-slate-900 text-xs whitespace-normal break-words block">
-                    {formatDateFR(dayStr)}
+                    {formatDateFR(dayStr) || formatDateFR(selectedSession.dateDebut)}
                     {daysList.length > 1 && ` (Jour ${dIdx + 1}/${daysList.length})`}
                   </span>
                 </div>

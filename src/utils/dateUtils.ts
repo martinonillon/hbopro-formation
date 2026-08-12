@@ -6,8 +6,14 @@
  * Normalizes any incoming date string/number (FR DD/MM/YYYY, US M/D/YY, ISO YYYY-MM-DD, Excel serials, etc.)
  * into an ISO date string 'YYYY-MM-DD'.
  */
-export function normalizeDateToISO(dateStr?: string | number | null): string | undefined {
+export function normalizeDateToISO(dateStr?: string | number | null | any): string | undefined {
   if (dateStr === undefined || dateStr === null) return undefined;
+  if (typeof dateStr === 'object') {
+    if (dateStr.dateDebut) return normalizeDateToISO(dateStr.dateDebut);
+    if (dateStr.dateInscription) return normalizeDateToISO(dateStr.dateInscription);
+    if (dateStr.date) return normalizeDateToISO(dateStr.date);
+    return undefined;
+  }
   let str = String(dateStr).trim();
   if (!str) return undefined;
 
@@ -87,11 +93,17 @@ export function normalizeDateToISO(dateStr?: string | number | null): string | u
 /**
  * Formats any date string/number into French standard format JJ/MM/AAAA (DD/MM/YYYY)
  */
-export function formatDateFR(dateStr?: string | number | null): string {
+export function formatDateFR(dateStr?: string | number | null | any): string {
   if (!dateStr) return '';
+  if (typeof dateStr === 'object') {
+    if (dateStr.dateDebut) return formatDateFR(dateStr.dateDebut);
+    if (dateStr.dateInscription) return formatDateFR(dateStr.dateInscription);
+    if (dateStr.date) return formatDateFR(dateStr.date);
+    return '';
+  }
   
   const iso = normalizeDateToISO(dateStr);
-  if (!iso) return String(dateStr);
+  if (!iso) return typeof dateStr === 'string' ? dateStr : '';
 
   const parts = iso.split('-');
   if (parts.length === 3) {
@@ -101,7 +113,7 @@ export function formatDateFR(dateStr?: string | number | null): string {
     }
   }
 
-  return String(dateStr);
+  return typeof dateStr === 'string' ? dateStr : '';
 }
 
 export const formatDateDMY = formatDateFR;
