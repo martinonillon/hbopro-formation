@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   UserPlus, 
   ShieldCheck, 
-  UserCheck, 
   Trash2, 
   Edit3, 
   RefreshCw, 
@@ -15,34 +14,19 @@ import {
   Shield,
   Search,
   Users,
-  LayoutDashboard,
-  Calendar,
-  FileSpreadsheet,
-  CreditCard,
-  Receipt,
-  BookOpen,
-  AlertTriangle
+  Home,
+  CheckCircle2
 } from 'lucide-react';
-import { AppUser, TabPermission, UserTabPermissions } from '../types';
+import { AppUser, AppPermissionLevel, UserAppPermissions, AppKey } from '../types';
 import { 
   generateRandomUserId, 
   getUserInitials,
-  TAB_LABELS, 
+  normalizeUserPermissions,
+  APP_DEFINITIONS,
+  APP_KEYS,
   ALL_FULL_PERMISSIONS, 
   DEFAULT_READONLY_PERMISSIONS 
 } from '../data/usersData';
-
-const TAB_ITEMS: { key: keyof UserTabPermissions; label: string; icon: React.ElementType }[] = [
-  { key: 'dashboard', label: 'KPI', icon: LayoutDashboard },
-  { key: 'calendar', label: 'Calendrier', icon: Calendar },
-  { key: 'logs', label: 'Suivi Général', icon: FileSpreadsheet },
-  { key: 'payroll', label: 'Gestion paye', icon: CreditCard },
-  { key: 'billing', label: 'Facturation', icon: Receipt },
-  { key: 'collaborators', label: 'Intérimaires', icon: Users },
-  { key: 'catalog', label: 'Catalogue', icon: BookOpen },
-  { key: 'coverageControl', label: 'Couverture', icon: AlertTriangle },
-  { key: 'admin', label: 'Admin', icon: Shield },
-];
 
 interface AdminManagementProps {
   users: AppUser[];
@@ -50,20 +34,8 @@ interface AdminManagementProps {
   onAddUser: (user: AppUser) => void;
   onUpdateUser: (user: AppUser) => void;
   onDeleteUser: (userId: string) => void;
-  currentUserPermission: TabPermission;
+  currentUserPermission: AppPermissionLevel;
 }
-
-const TAB_KEYS: (keyof UserTabPermissions)[] = [
-  'dashboard',
-  'calendar',
-  'logs',
-  'payroll',
-  'billing',
-  'collaborators',
-  'catalog',
-  'coverageControl',
-  'admin'
-];
 
 export default function AdminManagement({
   users,
@@ -83,7 +55,7 @@ export default function AdminManagement({
   const [formRole, setFormRole] = useState('');
   const [formUsername, setFormUsername] = useState('');
   const [randomSuffix, setRandomSuffix] = useState('1234');
-  const [formPermissions, setFormPermissions] = useState<UserTabPermissions>({ ...DEFAULT_READONLY_PERMISSIONS });
+  const [formPermissions, setFormPermissions] = useState<UserAppPermissions>({ ...DEFAULT_READONLY_PERMISSIONS });
   const [formError, setFormError] = useState('');
 
   const isReadOnly = currentUserPermission === 'Lecture';
@@ -118,7 +90,7 @@ export default function AdminManagement({
     } else {
       setRandomSuffix(generate4Digits());
     }
-    setFormPermissions({ ...user.permissions });
+    setFormPermissions(normalizeUserPermissions(user.permissions));
     setFormError('');
     setIsModalOpen(true);
   };
@@ -169,6 +141,8 @@ export default function AdminManagement({
       return;
     }
 
+    const validatedPermissions = normalizeUserPermissions(formPermissions);
+
     if (editingUser) {
       // Update
       const updatedUser: AppUser = {
@@ -177,7 +151,7 @@ export default function AdminManagement({
         firstName: cleanFirstName,
         role: cleanRole,
         username: cleanUsername,
-        permissions: formPermissions
+        permissions: validatedPermissions
       };
       onUpdateUser(updatedUser);
     } else {
@@ -188,7 +162,7 @@ export default function AdminManagement({
         firstName: cleanFirstName,
         role: cleanRole,
         username: cleanUsername,
-        permissions: formPermissions,
+        permissions: validatedPermissions,
         createdAt: new Date().toISOString()
       };
       onAddUser(newUser);
@@ -197,23 +171,19 @@ export default function AdminManagement({
     setIsModalOpen(false);
   };
 
-  const handlePermissionChange = (tabKey: keyof UserTabPermissions, perm: TabPermission) => {
+  const handlePermissionChange = (appKey: AppKey, perm: AppPermissionLevel) => {
     setFormPermissions(prev => ({
       ...prev,
-      [tabKey]: perm
+      [appKey]: perm
     }));
   };
 
-  const handleSetAllPermissions = (perm: TabPermission) => {
-    const nextPerms: UserTabPermissions = {
-      dashboard: perm,
-      calendar: perm,
-      logs: perm,
-      payroll: perm,
-      billing: perm,
-      collaborators: perm,
-      catalog: perm,
+  const handleSetAllPermissions = (perm: AppPermissionLevel) => {
+    const nextPerms: UserAppPermissions = {
+      formation: perm,
       coverageControl: perm,
+      contractGenerator: perm,
+      rhGenerator: perm,
       admin: perm,
     };
     setFormPermissions(nextPerms);
@@ -231,19 +201,19 @@ export default function AdminManagement({
   });
 
   return (
-    <div className="space-y-6" id="admin-management-container">
+    <div className="space-y-6 animate-fade-in" id="admin-management-container">
       
       {/* Top Header Card */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="bg-[#082C66] text-white p-2 rounded-xl">
-              <Shield className="h-5 w-5 text-[#ffde59]" />
+          <div className="flex items-center gap-3">
+            <span className="bg-[#082C66] text-white p-2.5 rounded-xl shadow-xs">
+              <Shield className="h-6 w-6 text-[#ffde59]" />
             </span>
             <div>
-              <h2 className="text-xl font-extrabold text-[#082C66] tracking-tight">Gestion des Utilisateurs & Habilitations</h2>
+              <h2 className="text-xl font-extrabold text-[#082C66] tracking-tight">Gestion des Droits d'Accès par Application</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Gérez les accès à l'application et définissez les droits sur les 9 onglets (Masquer, Lecture, Écriture).
+                Régulez l'accès des collaborateurs aux 5 applications métiers (Écriture, Lecture ou Masquer). L'accès à la page Accueil est garanti pour tous.
               </p>
             </div>
           </div>
@@ -258,6 +228,19 @@ export default function AdminManagement({
           <UserPlus className="h-4.5 w-4.5" />
           Ajouter un utilisateur
         </button>
+      </div>
+
+      {/* Info Banner on Universal Home Access */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl p-4 flex items-start sm:items-center gap-3 shadow-2xs">
+        <div className="w-8 h-8 rounded-xl bg-[#082C66] text-white flex items-center justify-center shrink-0 shadow-xs">
+          <Home className="w-4 h-4 text-[#ffde59]" />
+        </div>
+        <div className="flex-1 text-xs">
+          <p className="font-bold text-[#082C66]">Règle universelle de navigation</p>
+          <p className="text-slate-600 font-normal leading-relaxed">
+            La page <strong>Accueil</strong> est accessible à tous les utilisateurs par défaut. Si une application est définie sur <em>"Masquer"</em>, sa carte n'apparaît pas sur le portail d'accueil. Les droits <em>"Écriture"</em> ou <em>"Lecture"</em> sont automatiquement hérités par l'ensemble des sous-onglets rattachés.
+          </p>
+        </div>
       </div>
 
       {/* Toolbar & Search */}
@@ -275,14 +258,14 @@ export default function AdminManagement({
 
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
           <Users className="h-4 w-4 text-[#0062FF]" />
-          <span>Total utilisateurs enregistrés : </span>
+          <span>Total utilisateurs : </span>
           <span className="bg-blue-50 text-[#0062FF] font-mono font-extrabold px-2.5 py-0.5 rounded-full border border-blue-200">
             {users.length}
           </span>
         </div>
       </div>
 
-      {/* Users Table */}
+      {/* Users Table with Application Permissions */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -292,7 +275,7 @@ export default function AdminManagement({
                 <th className="py-3.5 px-4">Nom & Prénom</th>
                 <th className="py-3.5 px-4">Poste</th>
                 <th className="py-3.5 px-4">Identifiant</th>
-                <th className="py-3.5 px-4">Droits par onglet</th>
+                <th className="py-3.5 px-4">Droits par Application (5 Apps)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
@@ -305,6 +288,7 @@ export default function AdminManagement({
               ) : (
                 filteredUsers.map((u) => {
                   const isDefaultAdmin = u.username === 'MOE0226';
+                  const userPerms = normalizeUserPermissions(u.permissions);
 
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
@@ -373,45 +357,54 @@ export default function AdminManagement({
                         </span>
                       </td>
 
-                      {/* Column 5: Droits par onglet (Version synthétique) */}
+                      {/* Column 5: Droits par application */}
                       <td className="py-4 px-4">
-                        <div className="flex flex-wrap items-center gap-1.5 max-w-3xl">
-                          {TAB_ITEMS.map(({ key, label, icon: TabIcon }) => {
-                            const perm = u.permissions[key];
+                        <div className="flex flex-wrap items-center gap-2 max-w-4xl">
+                          {APP_KEYS.map((appKey) => {
+                            const appDef = APP_DEFINITIONS[appKey];
+                            const perm = userPerms[appKey];
+                            const AppIcon = appDef.icon;
+
                             if (perm === 'Écriture') {
                               return (
                                 <span
-                                  key={key}
-                                  title={`${label} : Écriture (Accès complet)`}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs"
+                                  key={appKey}
+                                  title={`${appDef.label} : Écriture (Accès complet à tous les onglets)`}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-200 shadow-2xs"
                                 >
-                                  <TabIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                  <span className="text-slate-800">{label}</span>
-                                  <span className="bg-emerald-600 text-white text-[9px] font-black px-1 py-0.2 rounded ml-0.5">Écriture</span>
+                                  <AppIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span className="font-bold">{appDef.label}</span>
+                                  <span className="bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded ml-0.5">
+                                    Écriture
+                                  </span>
                                 </span>
                               );
                             } else if (perm === 'Lecture') {
                               return (
                                 <span
-                                  key={key}
-                                  title={`${label} : Lecture seule (Consultation)`}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs"
+                                  key={appKey}
+                                  title={`${appDef.label} : Lecture seule (Consultation sur tous les onglets)`}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs"
                                 >
-                                  <TabIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                  <span className="text-slate-800">{label}</span>
-                                  <span className="bg-amber-500 text-white text-[9px] font-black px-1 py-0.2 rounded ml-0.5">Lecture</span>
+                                  <AppIcon className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span className="font-bold">{appDef.label}</span>
+                                  <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded ml-0.5">
+                                    Lecture
+                                  </span>
                                 </span>
                               );
                             } else {
                               return (
                                 <span
-                                  key={key}
-                                  title={`${label} : Masqué (Accès refusé)`}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-400 border border-slate-200/60 opacity-60"
+                                  key={appKey}
+                                  title={`${appDef.label} : Masqué (Application masquée sur l'accueil et inaccessible)`}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200 opacity-60"
                                 >
-                                  <TabIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                  <span className="line-through text-slate-400">{label}</span>
-                                  <span className="bg-slate-300 text-slate-600 text-[9px] font-bold px-1 py-0.2 rounded ml-0.5">Masquer</span>
+                                  <AppIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="line-through text-slate-500">{appDef.label}</span>
+                                  <span className="bg-slate-300 text-slate-700 text-[9px] font-bold px-1.5 py-0.5 rounded ml-0.5">
+                                    Masquer
+                                  </span>
                                 </span>
                               );
                             }
@@ -430,14 +423,14 @@ export default function AdminManagement({
       {/* User Creation / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden my-auto">
             
             {/* Modal Header */}
             <div className="bg-[#082C66] text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <ShieldCheck className="w-5 h-5 text-[#ffde59]" />
                 <h3 className="font-bold text-base">
-                  {editingUser ? `Modifier l'utilisateur ${editingUser.firstName} ${editingUser.lastName}` : 'Ajouter un nouvel utilisateur'}
+                  {editingUser ? `Modifier l'utilisateur : ${editingUser.firstName} ${editingUser.lastName}` : 'Ajouter un nouvel utilisateur'}
                 </h3>
               </div>
               <button
@@ -449,7 +442,7 @@ export default function AdminManagement({
             </div>
 
             {/* Modal Body with internal scrolling */}
-            <form onSubmit={handleSaveUser} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+            <form onSubmit={handleSaveUser} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
               
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold">
@@ -546,106 +539,143 @@ export default function AdminManagement({
                     <p className="text-[10px] text-amber-700 font-medium mt-0.5">L'identifiant du compte admin par défaut ne peut pas être modifié.</p>
                   ) : (
                     <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                      1ère lettre du Prénom + 1ère et dernière lettre du Nom + 4 chiffres. Modifiable à la main.
+                      1ère lettre du Prénom + 1ère et dernière lettre du Nom + 4 chiffres. Modifiable manuellement.
                     </p>
                   )}
                 </div>
               </div>
 
-              {/* Rights Matrix for 9 Tabs */}
-              <div className="space-y-3 pt-2 border-t border-slate-200">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+              {/* Rights Matrix by Application (5 Applications) */}
+              <div className="space-y-4 pt-4 border-t border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
                       <Lock className="w-4 h-4 text-[#0062FF]" />
-                      Définition des droits d'accès aux 9 onglets
+                      Gestion des droits par Application (5 Applications)
                     </h4>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Sélectionnez le niveau de privilège pour chaque onglet : Masquer, Lecture seule ou Écriture.
+                    <p className="text-xs text-slate-500 font-normal mt-0.5">
+                      Définissez le niveau d'autorisation pour chaque application. L'accès à la page <strong>Accueil</strong> reste universel.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => handleSetAllPermissions('Masquer')}
-                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded cursor-pointer"
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       Tout masquer
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSetAllPermissions('Lecture')}
-                      className="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 text-[10px] font-bold rounded cursor-pointer"
+                      className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       Tout en Lecture
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSetAllPermissions('Écriture')}
-                      className="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded cursor-pointer"
+                      className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       Tout en Écriture
                     </button>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2">
-                  {TAB_KEYS.map((tabKey) => {
-                    const info = TAB_LABELS[tabKey];
-                    const currentVal = formPermissions[tabKey];
+                <div className="space-y-3">
+                  {APP_KEYS.map((appKey) => {
+                    const appDef = APP_DEFINITIONS[appKey];
+                    const currentVal = formPermissions[appKey] || 'Lecture';
+                    const AppIcon = appDef.icon;
 
                     return (
-                      <div key={tabKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200/80 gap-2">
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">{info.label}</p>
-                          <p className="text-[10px] text-slate-500">{info.description}</p>
-                        </div>
-
-                        {/* 3-way toggle */}
-                        <div className="flex items-center gap-1 shrink-0 self-start sm:self-auto">
+                      <div 
+                        key={appKey} 
+                        className={`p-4 rounded-xl border transition-all ${
+                          currentVal === 'Écriture' 
+                            ? 'bg-emerald-50/40 border-emerald-200' 
+                            : currentVal === 'Lecture'
+                            ? 'bg-amber-50/40 border-amber-200'
+                            : 'bg-slate-50 border-slate-200 opacity-80'
+                        }`}
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                           
-                          {/* Masquer */}
-                          <button
-                            type="button"
-                            onClick={() => handlePermissionChange(tabKey, 'Masquer')}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-                              currentVal === 'Masquer'
-                                ? 'bg-slate-700 text-white shadow-xs'
-                                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                            }`}
-                          >
-                            <EyeOff className="w-3 h-3" />
-                            Masquer
-                          </button>
+                          {/* App Details */}
+                          <div className="flex items-start gap-3">
+                            <div 
+                              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs text-white"
+                              style={{ background: appDef.gradient }}
+                            >
+                              <AppIcon className="w-5 h-5 drop-shadow-xs" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h5 className="text-xs font-black text-slate-900">{appDef.label}</h5>
+                                <span className="text-[10px] font-semibold text-slate-500">• {appDef.subLabel}</span>
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed font-normal mt-0.5">
+                                {appDef.description}
+                              </p>
+                              {appDef.includedTabs && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {appDef.includedTabs.map((t, idx) => (
+                                    <span key={idx} className="bg-white/80 border border-slate-200 text-slate-600 text-[10px] font-semibold px-2 py-0.5 rounded-md">
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
 
-                          {/* Lecture */}
-                          <button
-                            type="button"
-                            onClick={() => handlePermissionChange(tabKey, 'Lecture')}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-                              currentVal === 'Lecture'
-                                ? 'bg-amber-500 text-white shadow-xs'
-                                : 'bg-slate-100 text-slate-500 hover:bg-amber-50 hover:text-amber-800'
-                            }`}
-                          >
-                            <Eye className="w-3 h-3" />
-                            Lecture
-                          </button>
+                          {/* 3-way toggle buttons */}
+                          <div className="flex items-center gap-1.5 shrink-0 self-start lg:self-auto bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                            
+                            {/* Masquer */}
+                            <button
+                              type="button"
+                              onClick={() => handlePermissionChange(appKey, 'Masquer')}
+                              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                                currentVal === 'Masquer'
+                                  ? 'bg-slate-800 text-white shadow-xs'
+                                  : 'text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              <EyeOff className="w-3.5 h-3.5" />
+                              Masquer
+                            </button>
 
-                          {/* Écriture */}
-                          <button
-                            type="button"
-                            onClick={() => handlePermissionChange(tabKey, 'Écriture')}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-                              currentVal === 'Écriture'
-                                ? 'bg-emerald-600 text-white shadow-xs'
-                                : 'bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-800'
-                            }`}
-                          >
-                            <Edit className="w-3 h-3" />
-                            Écriture
-                          </button>
+                            {/* Lecture */}
+                            <button
+                              type="button"
+                              onClick={() => handlePermissionChange(appKey, 'Lecture')}
+                              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                                currentVal === 'Lecture'
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : 'text-slate-600 hover:bg-amber-50 hover:text-amber-800'
+                              }`}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Lecture
+                            </button>
+
+                            {/* Écriture */}
+                            <button
+                              type="button"
+                              onClick={() => handlePermissionChange(appKey, 'Écriture')}
+                              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                                currentVal === 'Écriture'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800'
+                              }`}
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              Écriture
+                            </button>
+
+                          </div>
 
                         </div>
                       </div>

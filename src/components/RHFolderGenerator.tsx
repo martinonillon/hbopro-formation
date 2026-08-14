@@ -60,6 +60,7 @@ interface RHFolderGeneratorProps {
   collaborators: Collaborator[];
   onAddCollaborator: (collab: Omit<Collaborator, 'id'>) => void;
   onBackToHome?: () => void;
+  isReadOnly?: boolean;
 }
 
 interface DropZoneDef {
@@ -224,7 +225,8 @@ function formatFileSize(bytes: number): string {
 export default function RHFolderGenerator({
   collaborators,
   onAddCollaborator,
-  onBackToHome
+  onBackToHome,
+  isReadOnly = false
 }: RHFolderGeneratorProps) {
   // Collaborator search & selection state
   const [searchQuery, setSearchQuery] = useState('');
@@ -489,9 +491,16 @@ export default function RHFolderGenerator({
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              Générateur de Dossier RH
-            </h1>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                Générateur de Dossier RH
+              </h1>
+              {isReadOnly && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-amber-950 border border-amber-300 shadow-xs">
+                  Lecture seule
+                </span>
+              )}
+            </div>
             <p className="text-xs sm:text-sm text-white/95 font-medium">
               Standardisez le dossier RH des intérimaires hubjob
             </p>

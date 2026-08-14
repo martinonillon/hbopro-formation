@@ -36,7 +36,11 @@ Fichiers planning : depuis Planete > Planning > date de début/fin > sélectionn
 const ORLY_INFO_MESSAGE = `Fichiers contrats : depuis HBO > Plannings > Liste des contrats > Cliquer sur l'icone "export" > date de début/fin > Exporter les contrats
 Fichiers planning : depuis Planete > Planning > date de début/fin > sélectionner tout le monde > lancer la sélection > menu > impression > planning > tache par client (tous - planning réel - regrouper par salle - trier par nom - excel - cocher toutes les cases)`;
 
-export default function CoverageControl() {
+interface CoverageControlProps {
+  isReadOnly?: boolean;
+}
+
+export default function CoverageControl({ isReadOnly = false }: CoverageControlProps) {
   // Independent states for Province and Orly
   const [provinceState, setProvinceState] = useState<ZoneState>({
     contractsFile: null,
@@ -195,13 +199,20 @@ export default function CoverageControl() {
       
       {/* Main Header Banner */}
       <div className="bg-gradient-to-r from-[#082C66] via-[#0D3B82] to-[#0062FF] rounded-2xl p-6 text-white shadow-md relative overflow-hidden border border-blue-900/30">
-        <div className="relative z-10 space-y-1.5">
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-            Contrôle de Couverture
-          </h1>
-          <p className="text-xs md:text-sm text-blue-100 max-w-3xl leading-relaxed">
-            Vérification automatisée de la couverture du planning par un contrat pour HubJob PROVINCE et ORLY
-          </p>
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
+              Contrôle de Couverture
+            </h1>
+            <p className="text-xs md:text-sm text-blue-100 max-w-3xl leading-relaxed">
+              Vérification automatisée de la couverture du planning par un contrat pour HubJob PROVINCE et ORLY
+            </p>
+          </div>
+          {isReadOnly && (
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 font-black text-xs border border-amber-300 shadow-sm shrink-0 self-start sm:self-auto">
+              <span>Mode Consultation (Lecture seule)</span>
+            </div>
+          )}
         </div>
       </div>
 

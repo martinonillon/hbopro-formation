@@ -80,19 +80,23 @@ export interface RealTimeEvent {
   type: 'info' | 'success' | 'warning' | 'error';
 }
 
-export type TabPermission = 'Masquer' | 'Lecture' | 'Écriture';
+export type AppPermissionLevel = 'Masquer' | 'Lecture' | 'Écriture';
 
-export interface UserTabPermissions {
-  dashboard: TabPermission;
-  calendar: TabPermission;
-  logs: TabPermission;
-  payroll: TabPermission;
-  billing: TabPermission;
-  collaborators: TabPermission;
-  catalog: TabPermission;
-  coverageControl: TabPermission;
-  admin: TabPermission;
+// Alias for backwards compatibility
+export type TabPermission = AppPermissionLevel;
+
+export type AppKey = 'formation' | 'coverageControl' | 'contractGenerator' | 'rhGenerator' | 'admin';
+
+export interface UserAppPermissions {
+  formation: AppPermissionLevel;          // App Formation (KPI, Calendrier, Suivi Général, Paye, Facturation, Intérimaires, Catalogue)
+  coverageControl: AppPermissionLevel;    // App Contrôle de couverture
+  contractGenerator: AppPermissionLevel;  // App Générateur import contrat
+  rhGenerator: AppPermissionLevel;        // App Générateur dossier RH
+  admin: AppPermissionLevel;              // App Administration
 }
+
+// Alias for UserAppPermissions
+export type UserTabPermissions = UserAppPermissions;
 
 export interface AppUser {
   id: string;
@@ -100,7 +104,7 @@ export interface AppUser {
   lastName: string;
   firstName: string;
   role: string;
-  permissions: UserTabPermissions;
+  permissions: UserAppPermissions;
   createdAt: string;
 }
 

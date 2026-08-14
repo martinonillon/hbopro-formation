@@ -1,6 +1,6 @@
 {
-  "name": "Hubjob Formation",
-  "description": "Application intuitive et visuelle de gestion et suivi en temps réel des formations des collaborateurs Hubjob.",
+  "name": "HubStation",
+  "description": "Hub centralisé de gestion interne pour piloter et automatiser les opérations métiers.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

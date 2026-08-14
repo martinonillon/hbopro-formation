@@ -28,10 +28,10 @@ import {
   User as UserIcon,
   FolderGit2
 } from 'lucide-react';
-import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, TabPermission, UserTabPermissions } from './types';
+import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
 import { INITIAL_COLLABORATORS, INITIAL_TRAINING_LOGS } from './data/collaboratorsData';
-import { DEFAULT_ADMIN_USER, INITIAL_USERS } from './data/usersData';
+import { DEFAULT_ADMIN_USER, INITIAL_USERS, normalizeUserPermissions, DEFAULT_READONLY_PERMISSIONS } from './data/usersData';
 import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from './utils/dateUtils';
 import { deduplicateTrainingLogs } from './utils/deduplicateLogs';
 import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
@@ -62,7 +62,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
     const savedUserId = localStorage.getItem('alyzia_current_user_id');
     if (savedUserId === DEFAULT_ADMIN_USER.id) {
-      return DEFAULT_ADMIN_USER;
+      return {
+        ...DEFAULT_ADMIN_USER,
+        permissions: normalizeUserPermissions(DEFAULT_ADMIN_USER.permissions)
+      };
     }
     return null;
   });
@@ -112,6 +115,31 @@ export default function App() {
   const [passwordError, setPasswordError] = useState(false);
   const [isConsolidationUnlocked, setIsConsolidationUnlocked] = useState(false);
 
+  // Computed normalized permissions for the active session
+  const userPerms = currentUser ? normalizeUserPermissions(currentUser.permissions) : DEFAULT_READONLY_PERMISSIONS;
+
+  // Set document title to HubStation
+  useEffect(() => {
+    document.title = 'HubStation';
+  }, []);
+
+  // Enforce access control and redirection if activeTab is not permitted
+  useEffect(() => {
+    if (!currentUser) return;
+    const perms = normalizeUserPermissions(currentUser.permissions);
+    const formationTabs = ['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'collaborators', 'catalog', 'consolidation'];
+
+    if (formationTabs.includes(activeTab) && perms.formation === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'coverageControl' && perms.coverageControl === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'rhGenerator' && perms.rhGenerator === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'admin' && perms.admin === 'Masquer') {
+      setActiveTab('home');
+    }
+  }, [currentUser, activeTab]);
+
   // Save users to localStorage
   useEffect(() => {
     try {
@@ -123,19 +151,19 @@ export default function App() {
 
   // Handle Login & Logout
   const handleLogin = (user: AppUser) => {
-    setCurrentUser(user);
-    localStorage.setItem('alyzia_current_user_id', user.id);
-    
-    // Always default to 'home' or check permissions if in a sub-tab
-    if (activeTab !== 'home' && user.permissions[activeTab as keyof UserTabPermissions] === 'Masquer') {
-      setActiveTab('home');
-    }
+    const normalizedUser: AppUser = {
+      ...user,
+      permissions: normalizeUserPermissions(user.permissions)
+    };
+    setCurrentUser(normalizedUser);
+    localStorage.setItem('alyzia_current_user_id', normalizedUser.id);
+    setActiveTab('home');
     
     const timeString = new Date().toLocaleTimeString('fr-FR');
     const newEvent: RealTimeEvent = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: timeString,
-      message: `Connexion de ${user.firstName} ${user.lastName} (${user.username})`,
+      message: `Connexion de ${normalizedUser.firstName} ${normalizedUser.lastName} (${normalizedUser.username})`,
       type: 'success'
     };
     setEvents(prev => [newEvent, ...prev].slice(0, 50));
@@ -1442,7 +1470,8 @@ export default function App() {
           <div className="flex items-center gap-4 py-2">
             <HeaderLogo defaultLogoUrl={logoHubjob} canEditLogo={currentUser.username === 'MOE0226'} />
             <div className="hidden md:block pl-4 border-l border-slate-200">
-              <p className="text-xs text-slate-500 font-bold tracking-wide">Application de gestion interne</p>
+              <h1 className="text-base font-extrabold text-[#082C66] tracking-tight leading-tight">HubStation</h1>
+              <p className="text-xs text-slate-500 font-medium tracking-normal">Ton application de gestion interne</p>
             </div>
           </div>
 
@@ -1486,10 +1515,10 @@ export default function App() {
             <div className="w-full px-4 sm:px-6">
               <div className="flex space-x-1 overflow-x-auto py-2 items-center">
                 
-                {/* 1. Bouton Accueil (Toujours visible en 1ère position à gauche) */}
+                {/* 1. Bouton Accueil (Toujours visible et accessible universellement) */}
                 <button
                   onClick={() => setActiveTab('home')}
-                  className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                     activeTab === 'home' 
                       ? 'bg-[#082C66] text-white shadow-2xs' 
                       : 'text-slate-700 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
@@ -1501,141 +1530,125 @@ export default function App() {
                 </button>
 
                 {/* 2. Mode "App Formation" */}
-                {isFormationMode && (
+                {isFormationMode && userPerms.formation !== 'Masquer' && (
                   <>
                     <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
                     
-                    {currentUser.permissions.dashboard !== 'Masquer' && (
-                      <button
-                        onClick={() => setActiveTab('dashboard')}
-                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                          activeTab === 'dashboard' 
-                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                        }`}
-                        id="tab-dashboard"
-                      >
-                        <LayoutDashboard className="h-4 w-4 text-[#082C66]" />
-                        KPI
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('dashboard')}
+                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                        activeTab === 'dashboard' 
+                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                      }`}
+                      id="tab-dashboard"
+                    >
+                      <LayoutDashboard className="h-4 w-4 text-[#082C66]" />
+                      KPI
+                    </button>
 
-                    {currentUser.permissions.calendar !== 'Masquer' && (
-                      <button
-                        onClick={() => setActiveTab('calendar')}
-                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                          activeTab === 'calendar' 
-                            ? 'bg-[#06b6d4]/10 text-[#00838f] font-bold border border-[#06b6d4]/30 shadow-2xs' 
-                            : 'text-slate-600 hover:text-[#06b6d4] hover:bg-[#06b6d4]/5'
-                        }`}
-                        id="tab-calendar"
-                      >
-                        <Calendar className="h-4 w-4 text-[#06b6d4]" />
-                        Calendrier
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('calendar')}
+                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                        activeTab === 'calendar' 
+                          ? 'bg-[#06b6d4]/10 text-[#00838f] font-bold border border-[#06b6d4]/30 shadow-2xs' 
+                          : 'text-slate-600 hover:text-[#06b6d4] hover:bg-[#06b6d4]/5'
+                      }`}
+                      id="tab-calendar"
+                    >
+                      <Calendar className="h-4 w-4 text-[#06b6d4]" />
+                      Calendrier
+                    </button>
 
-                    {currentUser.permissions.logs !== 'Masquer' && (
-                      <button
-                        onClick={() => { setLogsFilter(null); setActiveTab('logs'); }}
-                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                          activeTab === 'logs' 
-                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                        }`}
-                        id="tab-logs"
-                      >
-                        <FileSpreadsheet className="h-4 w-4 text-[#57aea6]" />
-                        Suivi Général
-                      </button>
-                    )}
+                    <button
+                      onClick={() => { setLogsFilter(null); setActiveTab('logs'); }}
+                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                        activeTab === 'logs' 
+                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                      }`}
+                      id="tab-logs"
+                    >
+                      <FileSpreadsheet className="h-4 w-4 text-[#57aea6]" />
+                      Suivi Général
+                    </button>
 
-                    {currentUser.permissions.payroll !== 'Masquer' && (
-                      <button
-                        onClick={() => setActiveTab('payroll')}
-                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                          activeTab === 'payroll' 
-                            ? 'bg-purple-50 text-purple-900 font-bold border border-purple-200 shadow-2xs' 
-                            : 'text-slate-600 hover:text-purple-600 hover:bg-purple-50/50'
-                        }`}
-                        id="tab-payroll"
-                      >
-                        <CreditCard className="h-4 w-4 text-purple-600" />
-                        Gestion paye
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('payroll')}
+                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                        activeTab === 'payroll' 
+                          ? 'bg-purple-50 text-purple-900 font-bold border border-purple-200 shadow-2xs' 
+                          : 'text-slate-600 hover:text-purple-600 hover:bg-purple-50/50'
+                      }`}
+                      id="tab-payroll"
+                    >
+                      <CreditCard className="h-4 w-4 text-purple-600" />
+                      Gestion paye
+                    </button>
 
-                    {currentUser.permissions.billing !== 'Masquer' && (
-                      <button
-                        onClick={() => setActiveTab('billing')}
-                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                          activeTab === 'billing' 
-                            ? 'bg-amber-50 text-amber-900 font-bold border border-amber-200 shadow-2xs' 
-                            : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50/50'
-                        }`}
-                        id="tab-billing"
-                      >
-                        <Receipt className="h-4 w-4 text-amber-600" />
-                        Gestion facturation
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('billing')}
+                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                        activeTab === 'billing' 
+                          ? 'bg-amber-50 text-amber-900 font-bold border border-amber-200 shadow-2xs' 
+                          : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50/50'
+                      }`}
+                      id="tab-billing"
+                    >
+                      <Receipt className="h-4 w-4 text-amber-600" />
+                      Gestion facturation
+                    </button>
 
-                    {currentUser.permissions.collaborators !== 'Masquer' && (
-                      <button
-                        onClick={() => { setSelectedCollabId(null); setActiveTab('collaborators'); }}
-                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                          activeTab === 'collaborators' 
-                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                        }`}
-                        id="tab-collaborators"
-                      >
-                        <Users className="h-4 w-4 text-[#0062FF]" />
-                        Intérimaires
-                      </button>
-                    )}
+                    <button
+                      onClick={() => { setSelectedCollabId(null); setActiveTab('collaborators'); }}
+                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                        activeTab === 'collaborators' 
+                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                      }`}
+                      id="tab-collaborators"
+                    >
+                      <Users className="h-4 w-4 text-[#0062FF]" />
+                      Intérimaires
+                    </button>
 
-                    {currentUser.permissions.catalog !== 'Masquer' && (
-                      <button
-                        onClick={() => setActiveTab('catalog')}
-                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                          activeTab === 'catalog' 
-                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                        }`}
-                        id="tab-catalog"
-                      >
-                        <BookOpen className="h-4 w-4 text-[#ffde59]" />
-                        Catalogue de formation
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('catalog')}
+                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                        activeTab === 'catalog' 
+                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                      }`}
+                      id="tab-catalog"
+                    >
+                      <BookOpen className="h-4 w-4 text-[#ffde59]" />
+                      Catalogue de formation
+                    </button>
                   </>
                 )}
 
                 {/* 3. Mode "App Contrôle de couverture" */}
-                {isCoverageMode && (
+                {isCoverageMode && userPerms.coverageControl !== 'Masquer' && (
                   <>
                     <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
-                    {currentUser.permissions.coverageControl !== 'Masquer' && (
-                      <button
-                        onClick={() => setActiveTab('coverageControl')}
-                        className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-cyan-50 text-cyan-900 border border-cyan-200 shadow-2xs"
-                        id="tab-coverage-control"
-                      >
-                        <ShieldCheck className="h-4 w-4 text-cyan-600" />
-                        Contrôle de couverture
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('coverageControl')}
+                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-cyan-50 text-cyan-900 border border-cyan-200 shadow-2xs cursor-pointer"
+                      id="tab-coverage-control"
+                    >
+                      <ShieldCheck className="h-4 w-4 text-cyan-600" />
+                      Contrôle de couverture
+                    </button>
                   </>
                 )}
 
                 {/* 4. Mode "App Générateur dossier RH" */}
-                {isRhGeneratorMode && (
+                {isRhGeneratorMode && userPerms.rhGenerator !== 'Masquer' && (
                   <>
                     <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
                     <button
                       onClick={() => setActiveTab('rhGenerator')}
-                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-orange-50 text-[#d84315] border border-orange-200 shadow-2xs"
+                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-orange-50 text-[#d84315] border border-orange-200 shadow-2xs cursor-pointer"
                       id="tab-rh-generator"
                     >
                       <FolderGit2 className="h-4 w-4 text-[#ff751f]" />
@@ -1645,19 +1658,17 @@ export default function App() {
                 )}
 
                 {/* 5. Mode "App Administration" */}
-                {isAdminMode && (
+                {isAdminMode && userPerms.admin !== 'Masquer' && (
                   <>
                     <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
-                    {currentUser.permissions.admin !== 'Masquer' && (
-                      <button
-                        onClick={() => setActiveTab('admin')}
-                        className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs"
-                        id="tab-admin"
-                      >
-                        <Shield className="h-4 w-4 text-indigo-600" />
-                        Admin
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('admin')}
+                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs cursor-pointer"
+                      id="tab-admin"
+                    >
+                      <Shield className="h-4 w-4 text-indigo-600" />
+                      Admin
+                    </button>
                   </>
                 )}
 
@@ -1678,21 +1689,7 @@ export default function App() {
               currentUser={currentUser}
               onSelectApp={(app) => {
                 if (app === 'formation') {
-                  if (currentUser.permissions.dashboard !== 'Masquer') {
-                    setActiveTab('dashboard');
-                  } else if (currentUser.permissions.calendar !== 'Masquer') {
-                    setActiveTab('calendar');
-                  } else if (currentUser.permissions.logs !== 'Masquer') {
-                    setActiveTab('logs');
-                  } else if (currentUser.permissions.payroll !== 'Masquer') {
-                    setActiveTab('payroll');
-                  } else if (currentUser.permissions.billing !== 'Masquer') {
-                    setActiveTab('billing');
-                  } else if (currentUser.permissions.collaborators !== 'Masquer') {
-                    setActiveTab('collaborators');
-                  } else if (currentUser.permissions.catalog !== 'Masquer') {
-                    setActiveTab('catalog');
-                  }
+                  setActiveTab('dashboard');
                 } else if (app === 'coverageControl') {
                   setActiveTab('coverageControl');
                 } else if (app === 'rhGenerator') {
@@ -1706,8 +1703,8 @@ export default function App() {
             />
           )}
 
-          {/* Onglet KPI (ancien Accueil) */}
-          {activeTab === 'dashboard' && currentUser.permissions.dashboard !== 'Masquer' && (
+          {/* Onglet KPI (App Formation) */}
+          {activeTab === 'dashboard' && userPerms.formation !== 'Masquer' && (
             <Dashboard 
               collaborators={collaborators}
               trainingLogs={trainingLogs}
@@ -1723,11 +1720,11 @@ export default function App() {
                 }
                 setActiveTab(tab as any);
               }}
-              isReadOnly={currentUser.permissions.dashboard === 'Lecture'}
+              isReadOnly={userPerms.formation === 'Lecture'}
             />
           )}
 
-          {activeTab === 'collaborators' && currentUser.permissions.collaborators !== 'Masquer' && (
+          {activeTab === 'collaborators' && userPerms.formation !== 'Masquer' && (
             <CollaboratorsList 
               collaborators={collaborators}
               trainingLogs={trainingLogs}
@@ -1743,11 +1740,11 @@ export default function App() {
               onOpenEnrollment={() => { setEditLog(null); setIsEnrollmentOpen(true); }}
               selectedCollabId={selectedCollabId}
               onSelectCollabId={setSelectedCollabId}
-              isReadOnly={currentUser.permissions.collaborators === 'Lecture'}
+              isReadOnly={userPerms.formation === 'Lecture'}
             />
           )}
 
-          {activeTab === 'logs' && currentUser.permissions.logs !== 'Masquer' && (
+          {activeTab === 'logs' && userPerms.formation !== 'Masquer' && (
             <TrainingLogs 
               trainingLogs={trainingLogs}
               onUpdateTrainingStatus={handleUpdateTrainingStatus}
@@ -1761,11 +1758,11 @@ export default function App() {
                 setActiveTab('collaborators');
               }}
               onDeduplicateLogs={handleDeduplicateLogs}
-              isReadOnly={currentUser.permissions.logs === 'Lecture'}
+              isReadOnly={userPerms.formation === 'Lecture'}
             />
           )}
 
-          {activeTab === 'payroll' && currentUser.permissions.payroll !== 'Masquer' && (
+          {activeTab === 'payroll' && userPerms.formation !== 'Masquer' && (
             <PayrollManagement 
               trainingLogs={trainingLogs}
               collaborators={collaborators}
@@ -1775,11 +1772,11 @@ export default function App() {
                 setSelectedCollabId(collabId);
                 setActiveTab('collaborators');
               }}
-              isReadOnly={currentUser.permissions.payroll === 'Lecture'}
+              isReadOnly={userPerms.formation === 'Lecture'}
             />
           )}
 
-          {activeTab === 'billing' && currentUser.permissions.billing !== 'Masquer' && (
+          {activeTab === 'billing' && userPerms.formation !== 'Masquer' && (
             <BillingManagement 
               trainingLogs={trainingLogs}
               collaborators={collaborators}
@@ -1789,18 +1786,18 @@ export default function App() {
                 setSelectedCollabId(collabId);
                 setActiveTab('collaborators');
               }}
-              isReadOnly={currentUser.permissions.billing === 'Lecture'}
+              isReadOnly={userPerms.formation === 'Lecture'}
             />
           )}
 
-          {activeTab === 'catalog' && currentUser.permissions.catalog !== 'Masquer' && (
+          {activeTab === 'catalog' && userPerms.formation !== 'Masquer' && (
             <ModuleCatalog 
               modulesCatalog={modulesCatalog}
               trainingLogs={trainingLogs}
               onAddModule={handleAddModule}
               onUpdateModule={handleUpdateModule}
               onDeleteModule={handleDeleteModule}
-              isReadOnly={currentUser.permissions.catalog === 'Lecture'}
+              isReadOnly={userPerms.formation === 'Lecture'}
             />
           )}
 
@@ -1813,7 +1810,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'calendar' && currentUser.permissions.calendar !== 'Masquer' && (
+          {activeTab === 'calendar' && userPerms.formation !== 'Masquer' && (
             <CalendarView 
               trainingLogs={trainingLogs}
               collaborators={collaborators}
@@ -1822,30 +1819,33 @@ export default function App() {
               onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
               onDeleteLogs={handleDeleteLogs}
               onBulkUpdateLogs={handleBulkUpdateLogs}
-              isReadOnly={currentUser.permissions.calendar === 'Lecture'}
+              isReadOnly={userPerms.formation === 'Lecture'}
             />
           )}
 
-          {activeTab === 'coverageControl' && currentUser.permissions.coverageControl !== 'Masquer' && (
-            <CoverageControl />
+          {activeTab === 'coverageControl' && userPerms.coverageControl !== 'Masquer' && (
+            <CoverageControl 
+              isReadOnly={userPerms.coverageControl === 'Lecture'}
+            />
           )}
 
-          {activeTab === 'rhGenerator' && (
+          {activeTab === 'rhGenerator' && userPerms.rhGenerator !== 'Masquer' && (
             <RHFolderGenerator 
               collaborators={collaborators}
               onAddCollaborator={handleAddCollaborator}
               onBackToHome={() => setActiveTab('home')}
+              isReadOnly={userPerms.rhGenerator === 'Lecture'}
             />
           )}
 
-          {activeTab === 'admin' && currentUser.permissions.admin !== 'Masquer' && (
+          {activeTab === 'admin' && userPerms.admin !== 'Masquer' && (
             <AdminManagement 
               users={users}
               currentUser={currentUser}
               onAddUser={handleAddUser}
               onUpdateUser={handleUpdateUser}
               onDeleteUser={handleDeleteUser}
-              currentUserPermission={currentUser.permissions.admin}
+              currentUserPermission={userPerms.admin}
             />
           )}
         </div>
