@@ -64,7 +64,7 @@ export function generateRandomUserId(firstName: string = '', lastName: string = 
 }
 
 export const TAB_LABELS: Record<keyof UserTabPermissions, { label: string; description: string }> = {
-  dashboard: { label: 'Accueil', description: 'Tableau de bord, indicateurs et graphiques KPI' },
+  dashboard: { label: 'KPI', description: 'Tableau de bord, indicateurs et graphiques KPI' },
   calendar: { label: 'Calendrier', description: 'Planning des sessions de formation' },
   logs: { label: 'Suivi Général', description: 'Liste des inscriptions et historiques de formation' },
   payroll: { label: 'Gestion paye', description: 'Consignes de paye des intérimaires' },

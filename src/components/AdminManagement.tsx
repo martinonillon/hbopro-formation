@@ -33,7 +33,7 @@ import {
 } from '../data/usersData';
 
 const TAB_ITEMS: { key: keyof UserTabPermissions; label: string; icon: React.ElementType }[] = [
-  { key: 'dashboard', label: 'Accueil', icon: LayoutDashboard },
+  { key: 'dashboard', label: 'KPI', icon: LayoutDashboard },
   { key: 'calendar', label: 'Calendrier', icon: Calendar },
   { key: 'logs', label: 'Suivi Général', icon: FileSpreadsheet },
   { key: 'payroll', label: 'Gestion paye', icon: CreditCard },

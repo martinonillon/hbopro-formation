@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
+  Home,
   LayoutDashboard, 
   Users, 
   FileSpreadsheet, 
@@ -8,7 +9,7 @@ import {
   Award, 
   MapPin, 
   AlertCircle,
-  AlertTriangle,
+  AlertTriangle, 
   HelpCircle,
   CheckCircle,
   Clock,
@@ -20,10 +21,12 @@ import {
   Lock,
   KeyRound,
   ShieldAlert,
+  ShieldCheck,
   Calendar,
   Shield,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  FolderGit2
 } from 'lucide-react';
 import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, TabPermission, UserTabPermissions } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
@@ -36,6 +39,7 @@ import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupaba
 const logoHubjob = '/src/assets/images/logo_hubjob_1784577741492.jpg';
 
 // Lazy load individual sub-components
+import HomePortal from './components/HomePortal';
 import Dashboard from './components/Dashboard';
 import CollaboratorsList from './components/CollaboratorsList';
 import TrainingLogs from './components/TrainingLogs';
@@ -45,6 +49,7 @@ import ModuleCatalog from './components/ModuleCatalog';
 import ConsolidationPanel from './components/ConsolidationPanel';
 import CalendarView from './components/CalendarView';
 import CoverageControl from './components/CoverageControl';
+import RHFolderGenerator from './components/RHFolderGenerator';
 import EnrollmentModal from './components/EnrollmentModal';
 import HeaderLogo from './components/HeaderLogo';
 import LoginScreen from './components/LoginScreen';
@@ -90,7 +95,7 @@ export default function App() {
   };
 
   const [events, setEvents] = useState<RealTimeEvent[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'collaborators' | 'logs' | 'payroll' | 'billing' | 'catalog' | 'consolidation' | 'calendar' | 'coverageControl' | 'admin'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'collaborators' | 'logs' | 'payroll' | 'billing' | 'catalog' | 'consolidation' | 'calendar' | 'coverageControl' | 'admin' | 'rhGenerator'>('home');
   const [calendarInitialDate, setCalendarInitialDate] = useState<string | null>(null);
   const [calendarInitialNumSession, setCalendarInitialNumSession] = useState<string | null>(null);
   const [selectedCollabId, setSelectedCollabId] = useState<string | null>(null);
@@ -121,14 +126,9 @@ export default function App() {
     setCurrentUser(user);
     localStorage.setItem('alyzia_current_user_id', user.id);
     
-    // Check if current active tab is hidden for this user, if so switch to first visible tab
-    if (user.permissions[activeTab] === 'Masquer') {
-      const firstAvailable = (Object.keys(user.permissions) as (keyof UserTabPermissions)[]).find(
-        k => user.permissions[k] !== 'Masquer'
-      );
-      if (firstAvailable) {
-        setActiveTab(firstAvailable);
-      }
+    // Always default to 'home' or check permissions if in a sub-tab
+    if (activeTab !== 'home' && user.permissions[activeTab as keyof UserTabPermissions] === 'Masquer') {
+      setActiveTab('home');
     }
     
     const timeString = new Date().toLocaleTimeString('fr-FR');
@@ -1442,7 +1442,7 @@ export default function App() {
           <div className="flex items-center gap-4 py-2">
             <HeaderLogo defaultLogoUrl={logoHubjob} canEditLogo={currentUser.username === 'MOE0226'} />
             <div className="hidden md:block pl-4 border-l border-slate-200">
-              <p className="text-xs text-slate-500 font-bold tracking-wide">Suivi de formation, paye et facturation</p>
+              <p className="text-xs text-slate-500 font-bold tracking-wide">Application de gestion interne</p>
             </div>
           </div>
 
@@ -1475,154 +1475,238 @@ export default function App() {
       </header>
 
       {/* Navigation Tabs Bar */}
-      <nav className="bg-white border-b border-slate-200 sticky top-16 z-20 shadow-xs" id="navigation-tabs-bar">
-        <div className="w-full px-4 sm:px-6">
-          <div className="flex space-x-1 overflow-x-auto py-2">
-            
-            {currentUser.permissions.dashboard !== 'Masquer' && (
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'dashboard' 
-                    ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                    : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                }`}
-                id="tab-dashboard"
-              >
-                <LayoutDashboard className="h-4 w-4 text-[#082C66]" />
-                Accueil
-              </button>
-            )}
+      {(() => {
+        const isFormationMode = ['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'collaborators', 'catalog', 'consolidation'].includes(activeTab);
+        const isCoverageMode = activeTab === 'coverageControl';
+        const isRhGeneratorMode = activeTab === 'rhGenerator';
+        const isAdminMode = activeTab === 'admin';
 
-            {currentUser.permissions.calendar !== 'Masquer' && (
-              <button
-                onClick={() => setActiveTab('calendar')}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'calendar' 
-                    ? 'bg-[#06b6d4]/10 text-[#00838f] font-bold border border-[#06b6d4]/30 shadow-2xs' 
-                    : 'text-slate-600 hover:text-[#06b6d4] hover:bg-[#06b6d4]/5'
-                }`}
-                id="tab-calendar"
-              >
-                <Calendar className="h-4 w-4 text-[#06b6d4]" />
-                Calendrier
-              </button>
-            )}
+        return (
+          <nav className="bg-white border-b border-slate-200 sticky top-16 z-20 shadow-xs" id="navigation-tabs-bar">
+            <div className="w-full px-4 sm:px-6">
+              <div className="flex space-x-1 overflow-x-auto py-2 items-center">
+                
+                {/* 1. Bouton Accueil (Toujours visible en 1ère position à gauche) */}
+                <button
+                  onClick={() => setActiveTab('home')}
+                  className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTab === 'home' 
+                      ? 'bg-[#082C66] text-white shadow-2xs' 
+                      : 'text-slate-700 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                  }`}
+                  id="tab-home"
+                >
+                  <Home className="h-4 w-4" />
+                  Accueil
+                </button>
 
-            {currentUser.permissions.logs !== 'Masquer' && (
-              <button
-                onClick={() => { setLogsFilter(null); setActiveTab('logs'); }}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'logs' 
-                    ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                    : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                }`}
-                id="tab-logs"
-              >
-                <FileSpreadsheet className="h-4 w-4 text-[#57aea6]" />
-                Suivi Général
-              </button>
-            )}
+                {/* 2. Mode "App Formation" */}
+                {isFormationMode && (
+                  <>
+                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
+                    
+                    {currentUser.permissions.dashboard !== 'Masquer' && (
+                      <button
+                        onClick={() => setActiveTab('dashboard')}
+                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                          activeTab === 'dashboard' 
+                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                        }`}
+                        id="tab-dashboard"
+                      >
+                        <LayoutDashboard className="h-4 w-4 text-[#082C66]" />
+                        KPI
+                      </button>
+                    )}
 
-            {currentUser.permissions.payroll !== 'Masquer' && (
-              <button
-                onClick={() => setActiveTab('payroll')}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'payroll' 
-                    ? 'bg-purple-50 text-purple-900 font-bold border border-purple-200 shadow-2xs' 
-                    : 'text-slate-600 hover:text-purple-600 hover:bg-purple-50/50'
-                }`}
-                id="tab-payroll"
-              >
-                <CreditCard className="h-4 w-4 text-purple-600" />
-                Gestion paye
-              </button>
-            )}
+                    {currentUser.permissions.calendar !== 'Masquer' && (
+                      <button
+                        onClick={() => setActiveTab('calendar')}
+                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                          activeTab === 'calendar' 
+                            ? 'bg-[#06b6d4]/10 text-[#00838f] font-bold border border-[#06b6d4]/30 shadow-2xs' 
+                            : 'text-slate-600 hover:text-[#06b6d4] hover:bg-[#06b6d4]/5'
+                        }`}
+                        id="tab-calendar"
+                      >
+                        <Calendar className="h-4 w-4 text-[#06b6d4]" />
+                        Calendrier
+                      </button>
+                    )}
 
-            {currentUser.permissions.billing !== 'Masquer' && (
-              <button
-                onClick={() => setActiveTab('billing')}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'billing' 
-                    ? 'bg-amber-50 text-amber-900 font-bold border border-amber-200 shadow-2xs' 
-                    : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50/50'
-                }`}
-                id="tab-billing"
-              >
-                <Receipt className="h-4 w-4 text-amber-600" />
-                Gestion facturation
-              </button>
-            )}
+                    {currentUser.permissions.logs !== 'Masquer' && (
+                      <button
+                        onClick={() => { setLogsFilter(null); setActiveTab('logs'); }}
+                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                          activeTab === 'logs' 
+                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                        }`}
+                        id="tab-logs"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-[#57aea6]" />
+                        Suivi Général
+                      </button>
+                    )}
 
-            {currentUser.permissions.collaborators !== 'Masquer' && (
-              <button
-                onClick={() => { setSelectedCollabId(null); setActiveTab('collaborators'); }}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'collaborators' 
-                    ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                    : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                }`}
-                id="tab-collaborators"
-              >
-                <Users className="h-4 w-4 text-[#0062FF]" />
-                Intérimaires
-              </button>
-            )}
+                    {currentUser.permissions.payroll !== 'Masquer' && (
+                      <button
+                        onClick={() => setActiveTab('payroll')}
+                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                          activeTab === 'payroll' 
+                            ? 'bg-purple-50 text-purple-900 font-bold border border-purple-200 shadow-2xs' 
+                            : 'text-slate-600 hover:text-purple-600 hover:bg-purple-50/50'
+                        }`}
+                        id="tab-payroll"
+                      >
+                        <CreditCard className="h-4 w-4 text-purple-600" />
+                        Gestion paye
+                      </button>
+                    )}
 
-            {currentUser.permissions.catalog !== 'Masquer' && (
-              <button
-                onClick={() => setActiveTab('catalog')}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'catalog' 
-                    ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                    : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                }`}
-                id="tab-catalog"
-              >
-                <BookOpen className="h-4 w-4 text-[#ffde59]" />
-                Catalogue de formation
-              </button>
-            )}
+                    {currentUser.permissions.billing !== 'Masquer' && (
+                      <button
+                        onClick={() => setActiveTab('billing')}
+                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                          activeTab === 'billing' 
+                            ? 'bg-amber-50 text-amber-900 font-bold border border-amber-200 shadow-2xs' 
+                            : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50/50'
+                        }`}
+                        id="tab-billing"
+                      >
+                        <Receipt className="h-4 w-4 text-amber-600" />
+                        Gestion facturation
+                      </button>
+                    )}
 
-            {currentUser.permissions.coverageControl !== 'Masquer' && (
-              <button
-                onClick={() => setActiveTab('coverageControl')}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'coverageControl' 
-                    ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                    : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                }`}
-                id="tab-coverage-control"
-              >
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-                Contrôle de couverture
-              </button>
-            )}
+                    {currentUser.permissions.collaborators !== 'Masquer' && (
+                      <button
+                        onClick={() => { setSelectedCollabId(null); setActiveTab('collaborators'); }}
+                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                          activeTab === 'collaborators' 
+                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                        }`}
+                        id="tab-collaborators"
+                      >
+                        <Users className="h-4 w-4 text-[#0062FF]" />
+                        Intérimaires
+                      </button>
+                    )}
 
-            {currentUser.permissions.admin !== 'Masquer' && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeTab === 'admin' 
-                    ? 'bg-indigo-50 text-indigo-900 font-bold border border-indigo-200 shadow-2xs' 
-                    : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50'
-                }`}
-                id="tab-admin"
-              >
-                <Shield className="h-4 w-4 text-indigo-600" />
-                Admin
-              </button>
-            )}
+                    {currentUser.permissions.catalog !== 'Masquer' && (
+                      <button
+                        onClick={() => setActiveTab('catalog')}
+                        className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                          activeTab === 'catalog' 
+                            ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
+                            : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
+                        }`}
+                        id="tab-catalog"
+                      >
+                        <BookOpen className="h-4 w-4 text-[#ffde59]" />
+                        Catalogue de formation
+                      </button>
+                    )}
+                  </>
+                )}
 
-          </div>
-        </div>
-      </nav>
+                {/* 3. Mode "App Contrôle de couverture" */}
+                {isCoverageMode && (
+                  <>
+                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
+                    {currentUser.permissions.coverageControl !== 'Masquer' && (
+                      <button
+                        onClick={() => setActiveTab('coverageControl')}
+                        className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-cyan-50 text-cyan-900 border border-cyan-200 shadow-2xs"
+                        id="tab-coverage-control"
+                      >
+                        <ShieldCheck className="h-4 w-4 text-cyan-600" />
+                        Contrôle de couverture
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {/* 4. Mode "App Générateur dossier RH" */}
+                {isRhGeneratorMode && (
+                  <>
+                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
+                    <button
+                      onClick={() => setActiveTab('rhGenerator')}
+                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-orange-50 text-[#d84315] border border-orange-200 shadow-2xs"
+                      id="tab-rh-generator"
+                    >
+                      <FolderGit2 className="h-4 w-4 text-[#ff751f]" />
+                      Générateur dossier RH
+                    </button>
+                  </>
+                )}
+
+                {/* 5. Mode "App Administration" */}
+                {isAdminMode && (
+                  <>
+                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
+                    {currentUser.permissions.admin !== 'Masquer' && (
+                      <button
+                        onClick={() => setActiveTab('admin')}
+                        className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs"
+                        id="tab-admin"
+                      >
+                        <Shield className="h-4 w-4 text-indigo-600" />
+                        Admin
+                      </button>
+                    )}
+                  </>
+                )}
+
+              </div>
+            </div>
+          </nav>
+        );
+      })()}
 
       {/* Main content stage */}
       <main className="flex-1 w-full px-4 sm:px-6 py-6" id="main-content-stage">
         
         {/* Render Active Tab */}
         <div className="animate-fade-in">
+          {/* Nouveau Portail Principal : Accueil */}
+          {activeTab === 'home' && (
+            <HomePortal 
+              currentUser={currentUser}
+              onSelectApp={(app) => {
+                if (app === 'formation') {
+                  if (currentUser.permissions.dashboard !== 'Masquer') {
+                    setActiveTab('dashboard');
+                  } else if (currentUser.permissions.calendar !== 'Masquer') {
+                    setActiveTab('calendar');
+                  } else if (currentUser.permissions.logs !== 'Masquer') {
+                    setActiveTab('logs');
+                  } else if (currentUser.permissions.payroll !== 'Masquer') {
+                    setActiveTab('payroll');
+                  } else if (currentUser.permissions.billing !== 'Masquer') {
+                    setActiveTab('billing');
+                  } else if (currentUser.permissions.collaborators !== 'Masquer') {
+                    setActiveTab('collaborators');
+                  } else if (currentUser.permissions.catalog !== 'Masquer') {
+                    setActiveTab('catalog');
+                  }
+                } else if (app === 'coverageControl') {
+                  setActiveTab('coverageControl');
+                } else if (app === 'rhGenerator') {
+                  setActiveTab('rhGenerator');
+                } else if (app === 'admin') {
+                  setActiveTab('admin');
+                }
+              }}
+              collaboratorsCount={collaborators.length}
+              trainingLogsCount={trainingLogs.length}
+            />
+          )}
+
+          {/* Onglet KPI (ancien Accueil) */}
           {activeTab === 'dashboard' && currentUser.permissions.dashboard !== 'Masquer' && (
             <Dashboard 
               collaborators={collaborators}
@@ -1744,6 +1828,14 @@ export default function App() {
 
           {activeTab === 'coverageControl' && currentUser.permissions.coverageControl !== 'Masquer' && (
             <CoverageControl />
+          )}
+
+          {activeTab === 'rhGenerator' && (
+            <RHFolderGenerator 
+              collaborators={collaborators}
+              onAddCollaborator={handleAddCollaborator}
+              onBackToHome={() => setActiveTab('home')}
+            />
           )}
 
           {activeTab === 'admin' && currentUser.permissions.admin !== 'Masquer' && (
