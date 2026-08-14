@@ -36,9 +36,8 @@ import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from
 import { deduplicateTrainingLogs } from './utils/deduplicateLogs';
 import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
 import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupabase, checkAndMigrateLocalStorage, checkSupabaseHealth, clearSupabaseTable, fetchSessionDetails, fetchAllTrainingLogsFromSupabase } from './lib/supabaseSync';
-const logoHubjob = '/src/assets/images/logo_hubjob_1784577741492.jpg';
 
-// Lazy load individual sub-components
+// Sub-components
 import HomePortal from './components/HomePortal';
 import Dashboard from './components/Dashboard';
 import CollaboratorsList from './components/CollaboratorsList';
@@ -51,7 +50,6 @@ import CalendarView from './components/CalendarView';
 import CoverageControl from './components/CoverageControl';
 import RHFolderGenerator from './components/RHFolderGenerator';
 import EnrollmentModal from './components/EnrollmentModal';
-import HeaderLogo from './components/HeaderLogo';
 import LoginScreen from './components/LoginScreen';
 import AdminManagement from './components/AdminManagement';
 
@@ -1467,9 +1465,15 @@ export default function App() {
         <div className="w-full px-4 sm:px-6 h-full flex items-center justify-between">
           
           {/* Logo Group */}
-          <div className="flex items-center gap-4 py-2">
-            <HeaderLogo defaultLogoUrl={logoHubjob} canEditLogo={currentUser.username === 'MOE0226'} />
-            <div className="hidden md:block pl-4 border-l border-slate-200">
+          <div className="flex items-center gap-3.5 py-1.5" id="header-brand-group">
+            <img
+              src="/logo.png"
+              alt="HubStation"
+              className="h-10 sm:h-11 w-auto max-h-12 object-contain shrink-0"
+              referrerPolicy="no-referrer"
+              id="header-logo-image"
+            />
+            <div className="hidden md:block pl-3.5 border-l border-slate-200">
               <h1 className="text-base font-extrabold text-[#082C66] tracking-tight leading-tight">HubStation</h1>
               <p className="text-xs text-slate-500 font-medium tracking-normal">Ton application de gestion interne</p>
             </div>
