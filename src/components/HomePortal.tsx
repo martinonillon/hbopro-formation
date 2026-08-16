@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import { 
   GraduationCap, 
-  ShieldCheck, 
-  FileText, 
   FolderGit2, 
+  Clock, 
+  FileText, 
+  ShieldCheck, 
   Shield, 
   ArrowRight, 
-  Sparkles,
-  Lock,
-  Eye,
-  CheckCircle2,
+  Eye, 
   AlertCircle
 } from 'lucide-react';
 import { AppUser } from '../types';
@@ -32,16 +30,18 @@ export default function HomePortal({
   const permissions = normalizeUserPermissions(currentUser.permissions);
 
   const permFormation = permissions.formation;
-  const permCoverage = permissions.coverageControl;
-  const permContract = permissions.contractGenerator;
   const permRh = permissions.rhGenerator;
+  const permAbsence = permissions.absenceTracking;
+  const permContract = permissions.contractGenerator;
+  const permCoverage = permissions.coverageControl;
   const permAdmin = permissions.admin;
 
   const visibleAppsCount = [
     permFormation !== 'Masquer',
-    permCoverage !== 'Masquer',
-    permContract !== 'Masquer',
     permRh !== 'Masquer',
+    permAbsence !== 'Masquer',
+    permContract !== 'Masquer',
+    permCoverage !== 'Masquer',
     permAdmin !== 'Masquer',
   ].filter(Boolean).length;
 
@@ -75,7 +75,7 @@ export default function HomePortal({
         </div>
       )}
 
-      {/* Applications Grid with Custom Gradient Themes - Only displaying non-masqued apps */}
+      {/* Applications Grid with Custom Gradient Themes - Ordered according to user specification */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="apps-grid">
         
         {/* 1. App Formation (#35ffd0) */}
@@ -133,110 +133,7 @@ export default function HomePortal({
           </div>
         )}
 
-        {/* 2. App Contrôle de couverture (#ff5757) */}
-        {permCoverage !== 'Masquer' && (
-          <div 
-            id="card-app-coverage"
-            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-white/20"
-            style={{
-              background: 'linear-gradient(135deg, #ff5757 0%, #d32f2f 100%)',
-            }}
-            onClick={() => onSelectApp('coverageControl')}
-          >
-            {/* Watermark Background Icon */}
-            <div className="absolute -right-10 -bottom-10 text-white/20 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-white/30 transition-all duration-500">
-              <ShieldCheck className="w-64 h-64 stroke-[1.5]" />
-            </div>
-
-            <div className="relative z-10">
-              <div className="flex items-start justify-between mb-5">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
-                  <ShieldCheck className="w-8 h-8" />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {permCoverage === 'Lecture' ? (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-black/25 text-white border border-white/30 backdrop-blur-xs">
-                      <Eye className="w-3 h-3 text-amber-300" />
-                      Lecture seule
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/25 text-white border border-white/35 backdrop-blur-xs shadow-xs">
-                      <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-                      En ligne
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <h3 className="text-xl font-black text-white tracking-tight">
-                App Contrôle de couverture
-              </h3>
-              <p className="text-xs font-medium text-white/90 mt-1">
-                Contrôler la conformité entre le planning réel et les contrats édités.
-              </p>
-            </div>
-
-            <div className="relative z-10 pt-8 mt-6 border-t border-white/25 flex items-center justify-end">
-              <button 
-                type="button"
-                className="inline-flex items-center gap-2 text-xs font-black text-white group-hover:translate-x-1 transition-transform cursor-pointer bg-white/25 hover:bg-white/40 px-3.5 py-1.5 rounded-xl border border-white/30 shadow-xs"
-              >
-                <span>Accéder</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 3. App Générateur import contrat (#0062ff) */}
-        {permContract !== 'Masquer' && (
-          <div 
-            id="card-app-contract-generator"
-            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-white/20"
-            style={{
-              background: 'linear-gradient(135deg, #0062ff 0%, #0043b8 100%)',
-            }}
-            onClick={() => {
-              setInfoModal({
-                title: "App Générateur import contrat",
-                desc: "Ce module est actuellement en cours de développement. Il permettra d'automatiser l'importation et la conversion des données contractuelles vers vos matrices métiers."
-              });
-            }}
-          >
-            {/* Watermark Background Icon */}
-            <div className="absolute -right-10 -bottom-10 text-white/20 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-white/30 transition-all duration-500">
-              <FileText className="w-64 h-64 stroke-[1.5]" />
-            </div>
-
-            <div className="relative z-10">
-              <div className="flex items-start justify-between mb-5">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
-                  <FileText className="w-8 h-8" />
-                </div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 border border-amber-300 shadow-xs">
-                  <span className="w-2 h-2 rounded-full bg-amber-900 animate-pulse" />
-                  À venir
-                </span>
-              </div>
-
-              <h3 className="text-xl font-black text-white tracking-tight">
-                App Générateur import contrat
-              </h3>
-              <p className="text-xs font-medium text-white/90 mt-1">
-                Convertir instantanément vos imports de contrats pour HBO.
-              </p>
-            </div>
-
-            <div className="relative z-10 pt-8 mt-6 border-t border-white/25 flex items-center justify-end">
-              <div className="inline-flex items-center gap-2 text-xs font-bold text-white/80 bg-white/15 px-3.5 py-1.5 rounded-xl border border-white/20">
-                <span>Accéder</span>
-                <ArrowRight className="w-4 h-4 opacity-50" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 4. App Générateur dossier RH (#ff751f) */}
+        {/* 2. App Générateur dossier RH (#ff751f) */}
         {permRh !== 'Masquer' && (
           <div 
             id="card-app-rh-generator"
@@ -293,7 +190,158 @@ export default function HomePortal({
           </div>
         )}
 
-        {/* 5. App Administration (#6d72db) */}
+        {/* 3. App Suivi des absences (#57aea6 - À venir) */}
+        {permAbsence !== 'Masquer' && (
+          <div 
+            id="card-app-absence-tracking"
+            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-white/20"
+            style={{
+              background: 'linear-gradient(135deg, #57aea6 0%, #3d8c85 100%)',
+            }}
+            onClick={() => {
+              setInfoModal({
+                title: "App Suivi des absences",
+                desc: "Ce module est actuellement en cours de développement. Il permettra d'assurer le suivi complet des absences et de générer automatiquement le mailing associé."
+              });
+            }}
+          >
+            {/* Watermark Background Icon */}
+            <div className="absolute -right-10 -bottom-10 text-white/20 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-white/30 transition-all duration-500">
+              <Clock className="w-64 h-64 stroke-[1.5]" />
+            </div>
+
+            <div className="relative z-10">
+              <div className="flex items-start justify-between mb-5">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
+                  <Clock className="w-8 h-8" />
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 border border-amber-300 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-amber-900 animate-pulse" />
+                  À venir
+                </span>
+              </div>
+
+              <h3 className="text-xl font-black text-white tracking-tight">
+                App Suivi des absences
+              </h3>
+              <p className="text-xs font-medium text-white/90 mt-1">
+                Assure le suivi des absences et génère le mailing associé.
+              </p>
+            </div>
+
+            <div className="relative z-10 pt-8 mt-6 border-t border-white/25 flex items-center justify-end">
+              <div className="inline-flex items-center gap-2 text-xs font-bold text-white/90 bg-white/15 px-3.5 py-1.5 rounded-xl border border-white/20">
+                <span>Accéder</span>
+                <ArrowRight className="w-4 h-4 opacity-50" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. App Générateur import contrat (#0062ff - À venir) */}
+        {permContract !== 'Masquer' && (
+          <div 
+            id="card-app-contract-generator"
+            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-white/20"
+            style={{
+              background: 'linear-gradient(135deg, #0062ff 0%, #0043b8 100%)',
+            }}
+            onClick={() => {
+              setInfoModal({
+                title: "App Générateur import contrat",
+                desc: "Ce module est actuellement en cours de développement. Il permettra d'automatiser l'importation et la conversion des données contractuelles vers vos matrices métiers."
+              });
+            }}
+          >
+            {/* Watermark Background Icon */}
+            <div className="absolute -right-10 -bottom-10 text-white/20 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-white/30 transition-all duration-500">
+              <FileText className="w-64 h-64 stroke-[1.5]" />
+            </div>
+
+            <div className="relative z-10">
+              <div className="flex items-start justify-between mb-5">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
+                  <FileText className="w-8 h-8" />
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 border border-amber-300 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-amber-900 animate-pulse" />
+                  À venir
+                </span>
+              </div>
+
+              <h3 className="text-xl font-black text-white tracking-tight">
+                App Générateur import contrat
+              </h3>
+              <p className="text-xs font-medium text-white/90 mt-1">
+                Convertir instantanément vos imports de contrats pour HBO.
+              </p>
+            </div>
+
+            <div className="relative z-10 pt-8 mt-6 border-t border-white/25 flex items-center justify-end">
+              <div className="inline-flex items-center gap-2 text-xs font-bold text-white/80 bg-white/15 px-3.5 py-1.5 rounded-xl border border-white/20">
+                <span>Accéder</span>
+                <ArrowRight className="w-4 h-4 opacity-50" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 5. App Contrôle de couverture (#ff5757) */}
+        {permCoverage !== 'Masquer' && (
+          <div 
+            id="card-app-coverage"
+            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-white/20"
+            style={{
+              background: 'linear-gradient(135deg, #ff5757 0%, #d32f2f 100%)',
+            }}
+            onClick={() => onSelectApp('coverageControl')}
+          >
+            {/* Watermark Background Icon */}
+            <div className="absolute -right-10 -bottom-10 text-white/20 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-white/30 transition-all duration-500">
+              <ShieldCheck className="w-64 h-64 stroke-[1.5]" />
+            </div>
+
+            <div className="relative z-10">
+              <div className="flex items-start justify-between mb-5">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
+                  <ShieldCheck className="w-8 h-8" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {permCoverage === 'Lecture' ? (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-black/25 text-white border border-white/30 backdrop-blur-xs">
+                      <Eye className="w-3 h-3 text-amber-300" />
+                      Lecture seule
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/25 text-white border border-white/35 backdrop-blur-xs shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
+                      En ligne
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <h3 className="text-xl font-black text-white tracking-tight">
+                App Contrôle de couverture
+              </h3>
+              <p className="text-xs font-medium text-white/90 mt-1">
+                Contrôler la conformité entre le planning réel et les contrats édités.
+              </p>
+            </div>
+
+            <div className="relative z-10 pt-8 mt-6 border-t border-white/25 flex items-center justify-end">
+              <button 
+                type="button"
+                className="inline-flex items-center gap-2 text-xs font-black text-white group-hover:translate-x-1 transition-transform cursor-pointer bg-white/25 hover:bg-white/40 px-3.5 py-1.5 rounded-xl border border-white/30 shadow-xs"
+              >
+                <span>Accéder</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 6. App Administration (#6d72db) */}
         {permAdmin !== 'Masquer' && (
           <div 
             id="card-app-admin"

@@ -26,12 +26,14 @@ import {
   Shield,
   LogOut,
   User as UserIcon,
-  FolderGit2
+  FolderGit2,
+  BookUser
 } from 'lucide-react';
-import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions } from './types';
+import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
 import { INITIAL_COLLABORATORS, INITIAL_TRAINING_LOGS } from './data/collaboratorsData';
 import { DEFAULT_ADMIN_USER, INITIAL_USERS, normalizeUserPermissions, DEFAULT_READONLY_PERMISSIONS } from './data/usersData';
+import { DEFAULT_CONTACTS } from './data/defaultContacts';
 import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from './utils/dateUtils';
 import { deduplicateTrainingLogs } from './utils/deduplicateLogs';
 import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
@@ -52,6 +54,8 @@ import RHFolderGenerator from './components/RHFolderGenerator';
 import EnrollmentModal from './components/EnrollmentModal';
 import LoginScreen from './components/LoginScreen';
 import AdminManagement from './components/AdminManagement';
+import ContactsDirectory from './components/ContactsDirectory';
+import { getFormattedBuildDate } from './utils/buildInfo';
 
 export default function App() {
   // Users and Auth State
@@ -76,6 +80,21 @@ export default function App() {
   const [trainingLogs, setTrainingLogs] = useState<TrainingLog[]>([]);
 
   const [modulesCatalog, setModulesCatalog] = useState<TrainingModule[]>([]);
+
+  // Répertoire de contacts (Accessible universellement)
+  const [contacts, setContacts] = useState<Contact[]>(() => {
+    try {
+      const saved = localStorage.getItem('hubstation_contacts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn("Erreur lecture contacts localStorage", e);
+    }
+    return DEFAULT_CONTACTS;
+  });
+  const [isContactsDirectoryOpen, setIsContactsDirectoryOpen] = useState(false);
 
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
 
@@ -210,6 +229,36 @@ export default function App() {
     }
   };
 
+  // Contact Directory Handlers
+  const handleAddContact = (contactData: Omit<Contact, 'id' | 'createdAt'>) => {
+    const newContact: Contact = {
+      ...contactData,
+      id: 'cnt-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+      createdAt: new Date().toISOString()
+    };
+    setContacts(prev => [newContact, ...prev]);
+    saveItemToFirestore('contacts', newContact);
+    saveToSupabase('contacts', newContact, handleSupabaseWriteError);
+    addEvent(`Nouveau contact ajouté : ${newContact.firstName} ${newContact.lastName} (${newContact.escale} - ${newContact.entity})`, 'success');
+  };
+
+  const handleUpdateContact = (updatedContact: Contact) => {
+    setContacts(prev => prev.map(c => c.id === updatedContact.id ? updatedContact : c));
+    saveItemToFirestore('contacts', updatedContact);
+    saveToSupabase('contacts', updatedContact, handleSupabaseWriteError);
+    addEvent(`Contact mis à jour : ${updatedContact.firstName} ${updatedContact.lastName}`, 'info');
+  };
+
+  const handleDeleteContact = (contactId: string) => {
+    const contactToDelete = contacts.find(c => c.id === contactId);
+    setContacts(prev => prev.filter(c => c.id !== contactId));
+    deleteItemFromFirestore('contacts', contactId);
+    deleteFromSupabase('contacts', contactId, handleSupabaseWriteError);
+    if (contactToDelete) {
+      addEvent(`Contact supprimé : ${contactToDelete.firstName} ${contactToDelete.lastName}`, 'warning');
+    }
+  };
+
   const handleOpenConsolidation = () => {
     if (isConsolidationUnlocked) {
       setActiveTab('consolidation');
@@ -265,6 +314,14 @@ export default function App() {
     }
   }, [modulesCatalog]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('hubstation_contacts', JSON.stringify(contacts));
+    } catch (e) {
+      console.warn('Impossible de sauvegarder les contacts dans le stockage local:', e);
+    }
+  }, [contacts]);
+
   // Log events helper
   const addEvent = (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     const timeString = new Date().toLocaleTimeString('fr-FR');
@@ -302,6 +359,9 @@ export default function App() {
     }, [], handleSyncError);
     const unsubSupaModules = syncSupabaseTable('modules_catalog', setModulesCatalog, [], handleSyncError);
     const unsubSupaUsers = syncSupabaseTable('users', setUsers, [], handleSyncError);
+    const unsubSupaContacts = syncSupabaseTable('contacts', (data: Contact[]) => {
+      if (data && data.length > 0) setContacts(data);
+    }, [], handleSyncError);
 
     // Fallback Firestore real-time sync
     const unsubCollabs = syncCollection('collaborators', setCollaborators, []);
@@ -315,16 +375,21 @@ export default function App() {
     }, []);
     const unsubModules = syncCollection('modules_catalog', setModulesCatalog, []);
     const unsubUsers = syncCollection('users', setUsers, []);
+    const unsubContacts = syncCollection('contacts', (data: Contact[]) => {
+      if (data && data.length > 0) setContacts(data);
+    }, []);
 
     return () => {
       unsubSupaCollabs();
       unsubSupaLogs();
       unsubSupaModules();
       unsubSupaUsers();
+      unsubSupaContacts();
       unsubCollabs();
       unsubLogs();
       unsubModules();
       unsubUsers();
+      unsubContacts();
     };
   }, []);
 
@@ -1479,8 +1544,21 @@ export default function App() {
             </div>
           </div>
 
-          {/* Connected User Identity Badge & Logout Button */}
-          <div className="flex items-center gap-3">
+          {/* Right Header Group: Contacts Directory, Connected User Identity Badge & Logout Button */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            
+            {/* Bouton permanent Répertoire de contacts (Accessible universellement - Icône seule) */}
+            <button
+              onClick={() => setIsContactsDirectoryOpen(true)}
+              className="p-2 bg-blue-50/80 hover:bg-blue-100 text-[#082C66] hover:text-[#0062FF] rounded-xl border border-blue-200/80 transition-all cursor-pointer shadow-2xs active:scale-95 group flex items-center justify-center"
+              title="Répertoire de contacts"
+              aria-label="Répertoire de contacts"
+              id="header-contacts-directory-button"
+            >
+              <BookUser className="w-5 h-5 text-[#0062FF] group-hover:scale-110 transition-transform" />
+            </button>
+
+            {/* Connected User Identity Badge */}
             <div className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 transition-all px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
               <div className="w-7 h-7 bg-[#082C66] text-[#ffde59] rounded-lg flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
                 {currentUser.firstName[0]}{currentUser.lastName[0]}
@@ -1860,10 +1938,10 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200 py-4 shrink-0 mt-auto" id="main-app-footer">
         <div className="w-full px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-500">
           <div>
-            © 2026 <strong>Hubjob</strong>. Application de Gestion de Formation & d'Aptitudes en Temps Réel.
+            © 2026 <strong>Hubjob</strong>.
           </div>
           <div className="flex items-center gap-4">
-            <span>Données partenaires synchronisées</span>
+            <span className="font-medium text-slate-500">{getFormattedBuildDate()}</span>
             <span>•</span>
             <button 
               onClick={handleOpenConsolidation} 
@@ -1967,6 +2045,24 @@ export default function App() {
         initialDate={calendarInitialDate}
         initialNumSession={calendarInitialNumSession}
       />
+
+      {/* Répertoire de contacts Modal (Universel) */}
+      {isContactsDirectoryOpen && (
+        <div 
+          className="fixed inset-0 z-40 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-3 sm:p-5 pt-8 sm:pt-12 animate-fade-in"
+          id="modal-contacts-directory-container"
+        >
+          <div className="w-full max-w-7xl">
+            <ContactsDirectory
+              contacts={contacts}
+              onAddContact={handleAddContact}
+              onUpdateContact={handleUpdateContact}
+              onDeleteContact={handleDeleteContact}
+              onClose={() => setIsContactsDirectoryOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
     </div>
   );

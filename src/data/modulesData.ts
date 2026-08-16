@@ -609,7 +609,9 @@ export const ESCALE_COLORS: Record<string, { hex: string; bg: string; text: stri
   'NCE': { hex: '#0EA5E9', bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200/50' },
   'NTE': { hex: '#0D9488', bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200/50' },
   'TLS': { hex: '#EC4899', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200/50' },
-  'HUBJOB': { hex: '#64748B', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200/50' }
+  'HUBJOB': { hex: '#64748B', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200/50' },
+  'HBO': { hex: '#64748B', bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200/50' },
+  'GROUPE': { hex: '#4F46E5', bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200/50' }
 };
 
 export function getEscaleStyle(escale: string) {

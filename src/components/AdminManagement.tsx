@@ -181,9 +181,10 @@ export default function AdminManagement({
   const handleSetAllPermissions = (perm: AppPermissionLevel) => {
     const nextPerms: UserAppPermissions = {
       formation: perm,
-      coverageControl: perm,
-      contractGenerator: perm,
       rhGenerator: perm,
+      absenceTracking: perm,
+      contractGenerator: perm,
+      coverageControl: perm,
       admin: perm,
     };
     setFormPermissions(nextPerms);
@@ -213,7 +214,7 @@ export default function AdminManagement({
             <div>
               <h2 className="text-xl font-extrabold text-[#082C66] tracking-tight">Gestion des Droits d'Accès par Application</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Régulez l'accès des collaborateurs aux 5 applications métiers (Écriture, Lecture ou Masquer). L'accès à la page Accueil est garanti pour tous.
+                Régulez l'accès des collaborateurs aux applications métiers (Écriture, Lecture ou Masquer). L'accès à la page Accueil est garanti pour tous.
               </p>
             </div>
           </div>
@@ -551,7 +552,7 @@ export default function AdminManagement({
                   <div>
                     <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
                       <Lock className="w-4 h-4 text-[#0062FF]" />
-                      Gestion des droits par Application (5 Applications)
+                      Gestion des droits par Application (6 Applications)
                     </h4>
                     <p className="text-xs text-slate-500 font-normal mt-0.5">
                       Définissez le niveau d'autorisation pour chaque application. L'accès à la page <strong>Accueil</strong> reste universel.

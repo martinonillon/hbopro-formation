@@ -85,14 +85,15 @@ export type AppPermissionLevel = 'Masquer' | 'Lecture' | 'Écriture';
 // Alias for backwards compatibility
 export type TabPermission = AppPermissionLevel;
 
-export type AppKey = 'formation' | 'coverageControl' | 'contractGenerator' | 'rhGenerator' | 'admin';
+export type AppKey = 'formation' | 'rhGenerator' | 'absenceTracking' | 'contractGenerator' | 'coverageControl' | 'admin';
 
 export interface UserAppPermissions {
-  formation: AppPermissionLevel;          // App Formation (KPI, Calendrier, Suivi Général, Paye, Facturation, Intérimaires, Catalogue)
-  coverageControl: AppPermissionLevel;    // App Contrôle de couverture
-  contractGenerator: AppPermissionLevel;  // App Générateur import contrat
-  rhGenerator: AppPermissionLevel;        // App Générateur dossier RH
-  admin: AppPermissionLevel;              // App Administration
+  formation: AppPermissionLevel;          // 1. App Formation (KPI, Calendrier, Suivi Général, Paye, Facturation, Intérimaires, Catalogue)
+  rhGenerator: AppPermissionLevel;        // 2. App Générateur dossier RH
+  absenceTracking: AppPermissionLevel;    // 3. App Suivi des absences (À venir)
+  contractGenerator: AppPermissionLevel;  // 4. App Générateur import contrat (À venir)
+  coverageControl: AppPermissionLevel;    // 5. App Contrôle de couverture
+  admin: AppPermissionLevel;              // 6. App Administration
 }
 
 // Alias for UserAppPermissions
@@ -107,4 +108,30 @@ export interface AppUser {
   permissions: UserAppPermissions;
   createdAt: string;
 }
+
+export interface Contact {
+  id: string;
+  genre?: 'M.' | 'Mme' | string;
+  lastName: string;
+  firstName: string;
+  escale: string;
+  entity: string;
+  company?: string;
+  service?: string;
+  position?: string;
+  comment?: string;
+  mobilePhone?: string;
+  landlinePhone?: string;
+  email?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const CONTACT_ESCALES = [
+  'BES', 'BOD', 'LYS', 'MPL', 'MRS', 'NCE', 'NTE', 'TLS', 'GROUPE', 'HBO'
+] as const;
+
+export const CONTACT_ENTITIES = [
+  'ALYZIA', 'GIMAS', 'GIMAP', 'AHP', 'CAPRES', 'ACH', "GIMN'S", 'DIRBY', 'HUBJOB', 'SANTE', 'FORMATION'
+] as const;
 

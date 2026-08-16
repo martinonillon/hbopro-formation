@@ -1,26 +1,29 @@
 import { AppUser, UserAppPermissions, AppKey, AppPermissionLevel } from '../types';
 import { 
   GraduationCap, 
-  ShieldCheck, 
+  FolderGit2,
+  Clock,
   FileText, 
-  FolderGit2, 
+  ShieldCheck, 
   Shield 
 } from 'lucide-react';
 import React from 'react';
 
 export const ALL_FULL_PERMISSIONS: UserAppPermissions = {
   formation: 'Écriture',
-  coverageControl: 'Écriture',
-  contractGenerator: 'Écriture',
   rhGenerator: 'Écriture',
+  absenceTracking: 'Écriture',
+  contractGenerator: 'Écriture',
+  coverageControl: 'Écriture',
   admin: 'Écriture',
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserAppPermissions = {
   formation: 'Lecture',
-  coverageControl: 'Lecture',
-  contractGenerator: 'Lecture',
   rhGenerator: 'Lecture',
+  absenceTracking: 'Lecture',
+  contractGenerator: 'Lecture',
+  coverageControl: 'Lecture',
   admin: 'Masquer',
 };
 
@@ -39,7 +42,7 @@ export const INITIAL_USERS: AppUser[] = [
 ];
 
 /**
- * Normalizes raw user permissions to ensure full compatibility with the 5 application keys
+ * Normalizes raw user permissions to ensure full compatibility with all application keys
  */
 export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
   if (!rawPerms || typeof rawPerms !== 'object') {
@@ -48,9 +51,10 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
 
   // Handle migration from previous tab-based permissions if applicable
   const formationCandidate = rawPerms.formation || rawPerms.dashboard || rawPerms.logs || 'Lecture';
-  const coverageCandidate = rawPerms.coverageControl || 'Lecture';
-  const contractCandidate = rawPerms.contractGenerator || 'Lecture';
   const rhCandidate = rawPerms.rhGenerator || 'Écriture';
+  const absenceCandidate = rawPerms.absenceTracking || 'Lecture';
+  const contractCandidate = rawPerms.contractGenerator || 'Lecture';
+  const coverageCandidate = rawPerms.coverageControl || 'Lecture';
   const adminCandidate = rawPerms.admin || 'Masquer';
 
   const validatePerm = (val: any, fallback: AppPermissionLevel): AppPermissionLevel => {
@@ -60,9 +64,10 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
 
   return {
     formation: validatePerm(formationCandidate, 'Lecture'),
-    coverageControl: validatePerm(coverageCandidate, 'Lecture'),
-    contractGenerator: validatePerm(contractCandidate, 'Lecture'),
     rhGenerator: validatePerm(rhCandidate, 'Écriture'),
+    absenceTracking: validatePerm(absenceCandidate, 'Lecture'),
+    contractGenerator: validatePerm(contractCandidate, 'Lecture'),
+    coverageControl: validatePerm(coverageCandidate, 'Lecture'),
     admin: validatePerm(adminCandidate, 'Masquer'),
   };
 }
@@ -112,14 +117,23 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
     gradient: 'linear-gradient(135deg, #35ffd0 0%, #0ebfa0 100%)',
     icon: GraduationCap,
   },
-  coverageControl: {
-    key: 'coverageControl',
-    label: 'App Contrôle de couverture',
-    subLabel: 'Contrôler la conformité entre le planning réel et les contrats édités.',
-    description: 'Contrôler la conformité entre le planning réel et les contrats édités (Province et Orly).',
-    includedTabs: ['Contrôle Province', 'Contrôle Orly'],
-    gradient: 'linear-gradient(135deg, #ff5757 0%, #d32f2f 100%)',
-    icon: ShieldCheck,
+  rhGenerator: {
+    key: 'rhGenerator',
+    label: 'App Générateur dossier RH',
+    subLabel: "Standardiser et générer le dossier RH complet de l'intérimaire.",
+    description: "Standardiser et générer le dossier RH complet de l'intérimaire (12 pièces justificatives, recadrage photo et fusion PDF).",
+    includedTabs: ['12 pièces justificatives', 'Recadrage photo', 'Export ZIP'],
+    gradient: 'linear-gradient(135deg, #ff751f 0%, #d84315 100%)',
+    icon: FolderGit2,
+  },
+  absenceTracking: {
+    key: 'absenceTracking',
+    label: 'App Suivi des absences',
+    subLabel: 'Assure le suivi des absences et génère le mailing associé.',
+    description: 'Assure le suivi des absences et génère le mailing associé.',
+    includedTabs: ['Suivi absences', 'Génération mailing'],
+    gradient: 'linear-gradient(135deg, #57aea6 0%, #3d8c85 100%)',
+    icon: Clock,
   },
   contractGenerator: {
     key: 'contractGenerator',
@@ -130,14 +144,14 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
     gradient: 'linear-gradient(135deg, #0062ff 0%, #0043b8 100%)',
     icon: FileText,
   },
-  rhGenerator: {
-    key: 'rhGenerator',
-    label: 'App Générateur dossier RH',
-    subLabel: "Standardiser et générer le dossier RH complet de l'intérimaire.",
-    description: "Standardiser et générer le dossier RH complet de l'intérimaire (12 pièces justificatives, recadrage photo et fusion PDF).",
-    includedTabs: ['12 pièces justificatives', 'Recadrage photo', 'Export ZIP'],
-    gradient: 'linear-gradient(135deg, #ff751f 0%, #d84315 100%)',
-    icon: FolderGit2,
+  coverageControl: {
+    key: 'coverageControl',
+    label: 'App Contrôle de couverture',
+    subLabel: 'Contrôler la conformité entre le planning réel et les contrats édités.',
+    description: 'Contrôler la conformité entre le planning réel et les contrats édités (Province et Orly).',
+    includedTabs: ['Contrôle Province', 'Contrôle Orly'],
+    gradient: 'linear-gradient(135deg, #ff5757 0%, #d32f2f 100%)',
+    icon: ShieldCheck,
   },
   admin: {
     key: 'admin',
@@ -152,9 +166,10 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
 
 export const APP_KEYS: AppKey[] = [
   'formation',
-  'coverageControl',
-  'contractGenerator',
   'rhGenerator',
+  'absenceTracking',
+  'contractGenerator',
+  'coverageControl',
   'admin'
 ];
 
