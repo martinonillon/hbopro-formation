@@ -2,6 +2,7 @@ import { AppUser, UserAppPermissions, AppKey, AppPermissionLevel } from '../type
 import { 
   GraduationCap, 
   FolderGit2,
+  TrendingUp,
   Clock,
   FileText, 
   ShieldCheck, 
@@ -12,6 +13,7 @@ import React from 'react';
 export const ALL_FULL_PERMISSIONS: UserAppPermissions = {
   formation: 'Écriture',
   rhGenerator: 'Écriture',
+  operationsTracking: 'Écriture',
   absenceTracking: 'Écriture',
   contractGenerator: 'Écriture',
   coverageControl: 'Écriture',
@@ -21,6 +23,7 @@ export const ALL_FULL_PERMISSIONS: UserAppPermissions = {
 export const DEFAULT_READONLY_PERMISSIONS: UserAppPermissions = {
   formation: 'Lecture',
   rhGenerator: 'Lecture',
+  operationsTracking: 'Lecture',
   absenceTracking: 'Lecture',
   contractGenerator: 'Lecture',
   coverageControl: 'Lecture',
@@ -52,6 +55,7 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
   // Handle migration from previous tab-based permissions if applicable
   const formationCandidate = rawPerms.formation || rawPerms.dashboard || rawPerms.logs || 'Lecture';
   const rhCandidate = rawPerms.rhGenerator || 'Écriture';
+  const operationsCandidate = rawPerms.operationsTracking || 'Lecture';
   const absenceCandidate = rawPerms.absenceTracking || 'Lecture';
   const contractCandidate = rawPerms.contractGenerator || 'Lecture';
   const coverageCandidate = rawPerms.coverageControl || 'Lecture';
@@ -65,6 +69,7 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
   return {
     formation: validatePerm(formationCandidate, 'Lecture'),
     rhGenerator: validatePerm(rhCandidate, 'Écriture'),
+    operationsTracking: validatePerm(operationsCandidate, 'Lecture'),
     absenceTracking: validatePerm(absenceCandidate, 'Lecture'),
     contractGenerator: validatePerm(contractCandidate, 'Lecture'),
     coverageControl: validatePerm(coverageCandidate, 'Lecture'),
@@ -126,6 +131,15 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
     gradient: 'linear-gradient(135deg, #ff751f 0%, #d84315 100%)',
     icon: FolderGit2,
   },
+  operationsTracking: {
+    key: 'operationsTracking',
+    label: "App Suivi d'exploitation",
+    subLabel: "Suivi de l'activité par escale et KPI",
+    description: "Suivi de l'activité par escale et indicateurs clés de performance opérationnels.",
+    includedTabs: ['Activité par escale', 'KPI Opérations'],
+    gradient: 'linear-gradient(135deg, #082c66 0%, #031430 100%)',
+    icon: TrendingUp,
+  },
   absenceTracking: {
     key: 'absenceTracking',
     label: 'App Suivi des absences',
@@ -167,6 +181,7 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
 export const APP_KEYS: AppKey[] = [
   'formation',
   'rhGenerator',
+  'operationsTracking',
   'absenceTracking',
   'contractGenerator',
   'coverageControl',

@@ -85,15 +85,16 @@ export type AppPermissionLevel = 'Masquer' | 'Lecture' | 'Écriture';
 // Alias for backwards compatibility
 export type TabPermission = AppPermissionLevel;
 
-export type AppKey = 'formation' | 'rhGenerator' | 'absenceTracking' | 'contractGenerator' | 'coverageControl' | 'admin';
+export type AppKey = 'formation' | 'rhGenerator' | 'operationsTracking' | 'absenceTracking' | 'contractGenerator' | 'coverageControl' | 'admin';
 
 export interface UserAppPermissions {
   formation: AppPermissionLevel;          // 1. App Formation (KPI, Calendrier, Suivi Général, Paye, Facturation, Intérimaires, Catalogue)
   rhGenerator: AppPermissionLevel;        // 2. App Générateur dossier RH
-  absenceTracking: AppPermissionLevel;    // 3. App Suivi des absences (À venir)
-  contractGenerator: AppPermissionLevel;  // 4. App Générateur import contrat (À venir)
-  coverageControl: AppPermissionLevel;    // 5. App Contrôle de couverture
-  admin: AppPermissionLevel;              // 6. App Administration
+  operationsTracking: AppPermissionLevel; // 3. App Suivi d'exploitation (À venir - #082c66)
+  absenceTracking: AppPermissionLevel;    // 4. App Suivi des absences (À venir - #57aea6)
+  contractGenerator: AppPermissionLevel;  // 5. App Générateur import contrat (À venir - #0062ff)
+  coverageControl: AppPermissionLevel;    // 6. App Contrôle de couverture (#ff5757)
+  admin: AppPermissionLevel;              // 7. App Administration (#6d72db)
 }
 
 // Alias for UserAppPermissions

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { 
   GraduationCap, 
   FolderGit2, 
+  TrendingUp,
   Clock, 
   FileText, 
   ShieldCheck, 
@@ -31,6 +32,7 @@ export default function HomePortal({
 
   const permFormation = permissions.formation;
   const permRh = permissions.rhGenerator;
+  const permOperations = permissions.operationsTracking;
   const permAbsence = permissions.absenceTracking;
   const permContract = permissions.contractGenerator;
   const permCoverage = permissions.coverageControl;
@@ -39,6 +41,7 @@ export default function HomePortal({
   const visibleAppsCount = [
     permFormation !== 'Masquer',
     permRh !== 'Masquer',
+    permOperations !== 'Masquer',
     permAbsence !== 'Masquer',
     permContract !== 'Masquer',
     permCoverage !== 'Masquer',
@@ -75,56 +78,56 @@ export default function HomePortal({
         </div>
       )}
 
-      {/* Applications Grid with Custom Gradient Themes - Ordered according to user specification */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="apps-grid">
+      {/* Applications Grid with Custom Gradient Themes - 4 apps per line on large screens */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6" id="apps-grid">
         
         {/* 1. App Formation (#35ffd0) */}
         {permFormation !== 'Masquer' && (
           <div 
             id="card-app-formation"
-            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-black/10"
+            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-white/20"
             style={{
               background: 'linear-gradient(135deg, #35ffd0 0%, #0ebfa0 100%)',
             }}
             onClick={() => onSelectApp('formation')}
           >
             {/* Watermark Background Icon */}
-            <div className="absolute -right-10 -bottom-10 text-slate-950/20 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-slate-950/30 transition-all duration-500">
+            <div className="absolute -right-10 -bottom-10 text-white/20 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-white/30 transition-all duration-500">
               <GraduationCap className="w-64 h-64 stroke-[1.5]" />
             </div>
 
             <div className="relative z-10">
               <div className="flex items-start justify-between mb-5">
-                <div className="w-14 h-14 rounded-2xl bg-slate-900/15 backdrop-blur-md text-slate-900 border border-slate-900/20 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
                   <GraduationCap className="w-8 h-8" />
                 </div>
                 <div className="flex items-center gap-1.5">
                   {permFormation === 'Lecture' ? (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-amber-500/20 text-slate-950 border border-amber-500/30 backdrop-blur-xs">
-                      <Eye className="w-3 h-3 text-slate-950" />
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-black/25 text-white border border-white/30 backdrop-blur-xs">
+                      <Eye className="w-3 h-3 text-amber-300" />
                       Lecture seule
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-slate-900/15 text-slate-900 border border-slate-900/25 backdrop-blur-xs shadow-xs">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/25 text-white border border-white/35 backdrop-blur-xs shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
                       En ligne
                     </span>
                   )}
                 </div>
               </div>
 
-              <h3 className="text-xl font-black text-slate-900 tracking-tight">
+              <h3 className="text-xl font-black text-white tracking-tight">
                 App Formation
               </h3>
-              <p className="text-xs font-semibold text-slate-900/80 mt-1">
+              <p className="text-xs font-medium text-white/90 mt-1">
                 Planifier, suivre les sessions et gérer la paie et la facturation.
               </p>
             </div>
 
-            <div className="relative z-10 pt-8 mt-6 border-t border-slate-900/20 flex items-center justify-end">
+            <div className="relative z-10 pt-8 mt-6 border-t border-white/25 flex items-center justify-end">
               <button 
                 type="button"
-                className="inline-flex items-center gap-2 text-xs font-black text-slate-900 group-hover:translate-x-1 transition-transform cursor-pointer bg-white/50 hover:bg-white/75 px-3.5 py-1.5 rounded-xl border border-slate-900/15 shadow-xs"
+                className="inline-flex items-center gap-2 text-xs font-black text-white group-hover:translate-x-1 transition-transform cursor-pointer bg-white/25 hover:bg-white/40 px-3.5 py-1.5 rounded-xl border border-white/30 shadow-xs"
               >
                 <span>Accéder</span>
                 <ArrowRight className="w-4 h-4" />
@@ -190,7 +193,55 @@ export default function HomePortal({
           </div>
         )}
 
-        {/* 3. App Suivi des absences (#57aea6 - À venir) */}
+        {/* 3. App Suivi d'exploitation (#082c66 - À venir) */}
+        {permOperations !== 'Masquer' && (
+          <div 
+            id="card-app-operations-tracking"
+            className="group rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden transition-all duration-300 shadow-md hover:-translate-y-1 hover:shadow-2xl cursor-pointer ring-1 ring-white/20"
+            style={{
+              background: 'linear-gradient(135deg, #082c66 0%, #031430 100%)',
+            }}
+            onClick={() => {
+              setInfoModal({
+                title: "App Suivi d'exploitation",
+                desc: "Ce module est actuellement en cours de développement. Il permettra d'assurer le suivi détaillé de l'activité par escale ainsi que le pilotage complet des KPI opérationnels."
+              });
+            }}
+          >
+            {/* Watermark Background Icon */}
+            <div className="absolute -right-10 -bottom-10 text-white/15 pointer-events-none group-hover:scale-110 group-hover:rotate-6 group-hover:text-white/25 transition-all duration-500">
+              <TrendingUp className="w-64 h-64 stroke-[1.5]" />
+            </div>
+
+            <div className="relative z-10">
+              <div className="flex items-start justify-between mb-5">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
+                  <TrendingUp className="w-8 h-8 text-white" />
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-amber-950 border border-amber-300 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-amber-900 animate-pulse" />
+                  À venir
+                </span>
+              </div>
+
+              <h3 className="text-xl font-black text-white tracking-tight">
+                App Suivi d'exploitation
+              </h3>
+              <p className="text-xs font-medium text-white/90 mt-1">
+                Suivi de l'activité par escale et KPI
+              </p>
+            </div>
+
+            <div className="relative z-10 pt-8 mt-6 border-t border-white/25 flex items-center justify-end">
+              <div className="inline-flex items-center gap-2 text-xs font-bold text-white/90 bg-white/15 px-3.5 py-1.5 rounded-xl border border-white/20">
+                <span>Accéder</span>
+                <ArrowRight className="w-4 h-4 opacity-50" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. App Suivi des absences (#57aea6 - À venir) */}
         {permAbsence !== 'Masquer' && (
           <div 
             id="card-app-absence-tracking"

@@ -182,6 +182,7 @@ export default function AdminManagement({
     const nextPerms: UserAppPermissions = {
       formation: perm,
       rhGenerator: perm,
+      operationsTracking: perm,
       absenceTracking: perm,
       contractGenerator: perm,
       coverageControl: perm,
@@ -552,7 +553,7 @@ export default function AdminManagement({
                   <div>
                     <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
                       <Lock className="w-4 h-4 text-[#0062FF]" />
-                      Gestion des droits par Application (6 Applications)
+                      Gestion des droits par Application (7 Applications)
                     </h4>
                     <p className="text-xs text-slate-500 font-normal mt-0.5">
                       Définissez le niveau d'autorisation pour chaque application. L'accès à la page <strong>Accueil</strong> reste universel.
