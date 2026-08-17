@@ -133,6 +133,6 @@ export const CONTACT_ESCALES = [
 ] as const;
 
 export const CONTACT_ENTITIES = [
-  'ALYZIA', 'GIMAS', 'GIMAP', 'AHP', 'CAPRES', 'ACH', "GIMN'S", 'DIRBY', 'HUBJOB', 'SANTE', 'FORMATION'
+  'ALYZIA', 'GIMAS', 'GIMAP', 'AHP', 'CAPRES', 'ACH', "GIMN'S", 'DIRBY', 'HUBJOB', 'SANTE', 'FORMATION', 'AUTRE'
 ] as const;
 

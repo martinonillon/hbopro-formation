@@ -465,6 +465,32 @@ export function sanitizeItemForTable(tableName: string, item: any): Record<strin
     return clean;
   }
 
+  if (tableName === 'contacts') {
+    const clean: Record<string, any> = {};
+    clean.id = item.id;
+    clean.genre = strOrNull(item.genre);
+    clean.lastName = strOrEmpty(item.lastName || item.last_name);
+    clean.last_name = strOrEmpty(item.lastName || item.last_name);
+    clean.firstName = strOrEmpty(item.firstName || item.first_name);
+    clean.first_name = strOrEmpty(item.firstName || item.first_name);
+    clean.escale = strOrEmpty(item.escale || 'BOD');
+    clean.entity = strOrEmpty(item.entity || 'HUBJOB');
+    clean.company = strOrNull(item.company);
+    clean.service = strOrNull(item.service);
+    clean.position = strOrNull(item.position);
+    clean.comment = strOrNull(item.comment);
+    clean.mobilePhone = strOrNull(item.mobilePhone || item.mobile_phone);
+    clean.mobile_phone = strOrNull(item.mobilePhone || item.mobile_phone);
+    clean.landlinePhone = strOrNull(item.landlinePhone || item.landline_phone);
+    clean.landline_phone = strOrNull(item.landlinePhone || item.landline_phone);
+    clean.email = strOrNull(item.email);
+    clean.createdAt = item.createdAt || item.created_at || new Date().toISOString();
+    clean.created_at = item.createdAt || item.created_at || new Date().toISOString();
+    clean.updatedAt = item.updatedAt || item.updated_at || new Date().toISOString();
+    clean.updated_at = item.updatedAt || item.updated_at || new Date().toISOString();
+    return clean;
+  }
+
   // General fallback: remove undefined and non-serializable fields
   const clean: Record<string, any> = {};
   Object.keys(item).forEach(key => {

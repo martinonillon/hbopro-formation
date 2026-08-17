@@ -87,12 +87,12 @@ export default function App() {
       const saved = localStorage.getItem('hubstation_contacts');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.warn("Erreur lecture contacts localStorage", e);
     }
-    return DEFAULT_CONTACTS;
+    return [];
   });
   const [isContactsDirectoryOpen, setIsContactsDirectoryOpen] = useState(false);
 
@@ -359,9 +359,7 @@ export default function App() {
     }, [], handleSyncError);
     const unsubSupaModules = syncSupabaseTable('modules_catalog', setModulesCatalog, [], handleSyncError);
     const unsubSupaUsers = syncSupabaseTable('users', setUsers, [], handleSyncError);
-    const unsubSupaContacts = syncSupabaseTable('contacts', (data: Contact[]) => {
-      if (data && data.length > 0) setContacts(data);
-    }, [], handleSyncError);
+    const unsubSupaContacts = syncSupabaseTable('contacts', setContacts, [], handleSyncError);
 
     // Fallback Firestore real-time sync
     const unsubCollabs = syncCollection('collaborators', setCollaborators, []);
@@ -375,9 +373,7 @@ export default function App() {
     }, []);
     const unsubModules = syncCollection('modules_catalog', setModulesCatalog, []);
     const unsubUsers = syncCollection('users', setUsers, []);
-    const unsubContacts = syncCollection('contacts', (data: Contact[]) => {
-      if (data && data.length > 0) setContacts(data);
-    }, []);
+    const unsubContacts = syncCollection('contacts', setContacts, []);
 
     return () => {
       unsubSupaCollabs();
@@ -391,6 +387,24 @@ export default function App() {
       unsubUsers();
       unsubContacts();
     };
+  }, []);
+
+  // Handler: Clear/Purge all contacts from Supabase, Firestore, and state
+  const handleClearAllContacts = async () => {
+    setContacts([]);
+    localStorage.setItem('hubstation_contacts', JSON.stringify([]));
+    await clearSupabaseTable('contacts', handleSupabaseWriteError);
+    await clearFirestoreCollection('contacts');
+    addEvent("Base de données du répertoire de contacts entièrement purgée. Prêt pour le nouvel import.", "warning");
+  };
+
+  // One-time purge of the contacts database on request
+  useEffect(() => {
+    const isPurged = localStorage.getItem('hubstation_contacts_purged_v2');
+    if (!isPurged) {
+      handleClearAllContacts();
+      localStorage.setItem('hubstation_contacts_purged_v2', 'true');
+    }
   }, []);
 
   // Handler: Clear/Purge all collaborators from Supabase, Firestore, and state
@@ -1175,16 +1189,17 @@ export default function App() {
       
       else if (type === 'agents') {
         // Matricule, Nom, Prénom, Escale, Service, Téléphone, Mail
-        const matriculeIdx = headers.findIndex(h => h.includes('MATRICULE'));
-        const nomIdx = headers.findIndex(h => h.includes('NOM'));
-        const prenomIdx = headers.findIndex(h => h.includes('PRENOM') || h.includes('PRÉNOM'));
-        const escaleIdx = headers.findIndex(h => h.includes('ESCALE'));
-        const serviceIdx = headers.findIndex(h => h.includes('SERVICE'));
-        const telIdx = headers.findIndex(h => h.includes('TEL') || h.includes('PHONE') || h.includes('TELEPHONE') || h.includes('TÉLÉPHONE') || h.includes('PORTABLE'));
-        const mailIdx = headers.findIndex(h => h.includes('MAIL') || h.includes('EMAIL') || h.includes('E-MAIL'));
+        const cleanH = headers.map(h => h.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, ""));
+        const matriculeIdx = cleanH.findIndex(h => h.includes('MATRICULE') || h === 'ID' || h === 'MAT');
+        const nomIdx = cleanH.findIndex(h => (h === 'NOM' || h === 'LASTNAME' || h.includes('NOM')) && !h.includes('PRENOM') && !h.includes('PRÉNOM'));
+        const prenomIdx = cleanH.findIndex(h => h === 'PRENOM' || h === 'FIRSTNAME' || h.includes('PRENOM') || h.includes('PRÉNOM'));
+        const escaleIdx = cleanH.findIndex(h => h.includes('ESCALE') || h.includes('STATION') || h.includes('BASE'));
+        const serviceIdx = cleanH.findIndex(h => h.includes('SERVICE') || h.includes('DEP') || h.includes('DEPARTEMENT'));
+        const telIdx = cleanH.findIndex(h => h.includes('TEL') || h.includes('PHONE') || h.includes('PORTABLE') || h.includes('MOBILE'));
+        const mailIdx = cleanH.findIndex(h => h.includes('MAIL') || h.includes('EMAIL') || h.includes('COURRIEL'));
 
         if (nomIdx === -1 || prenomIdx === -1) {
-          return { success: false, message: "Les colonnes 'NOM' et 'PRENOM' sont obligatoires pour importer des agents. Format attendu : MATRICULE,NOM,PRENOM,ESCALE,SERVICE,TELEPHONE,MAIL" };
+          return { success: false, message: "Les colonnes 'NOM' et 'PRENOM' distinctes sont obligatoires pour importer des agents. Format attendu : MATRICULE,NOM,PRENOM,ESCALE,SERVICE,TELEPHONE,MAIL" };
         }
 
         const newCollabs: Collaborator[] = [];
@@ -1461,6 +1476,191 @@ export default function App() {
           success: true, 
           message: `Félicitations ! L'historique de suivi de formation (${finalLogsToSave.length} dossiers uniques) a été enregistré et conservé avec succès dans Supabase (${mode === 'replace' ? 'Remplacé' : 'Ajouté'}).`, 
           count: finalLogsToSave.length 
+        };
+      }
+
+      else if (type === 'contacts') {
+        const normHeader = (h: string) => 
+          h.trim()
+           .toUpperCase()
+           .normalize("NFD")
+           .replace(/[\u0300-\u036f]/g, "")
+           .replace(/[^A-Z0-9]/g, "");
+
+        const cleanHeaders = headers.map(normHeader);
+        const findHeaderIdx = (...keys: string[]) => {
+          return cleanHeaders.findIndex(ch => keys.some(k => ch === k || ch.includes(k)));
+        };
+
+        const genreIdx = findHeaderIdx('GENRE', 'CIVILITE', 'TITRE', 'SEXE');
+        
+        // Exact and disambiguated matching for NOM vs PRENOM
+        const nomIdx = cleanHeaders.findIndex(ch => 
+          (ch === 'NOM' || ch === 'LASTNAME' || ch === 'FAMILYNAME' || ch === 'NOMDEFAMILLE' || ch.includes('NOMUSAGE') || ch.includes('PATRONYME')) &&
+          !ch.includes('PRENOM') && !ch.includes('PRÉNOM') && !ch.includes('FULL') && !ch.includes('AUTONOM')
+        );
+
+        const prenomIdx = cleanHeaders.findIndex(ch => 
+          ch === 'PRENOM' || ch === 'FIRSTNAME' || ch === 'GIVENNAME' || ch.includes('PRENOM') || ch.includes('PRÉNOM')
+        );
+
+        // Fallback for single combined column: "NOM ET PRENOM", "NOM PRENOM", "NOM COMPLET", "CONTACT"
+        const fullNameIdx = cleanHeaders.findIndex(ch =>
+          ch.includes('NOMETPRENOM') || ch.includes('NOMPRENOM') || ch.includes('NOMCOMPLET') || ch === 'CONTACT' || ch === 'AGENT' || ch === 'PERSONNE'
+        );
+
+        const escaleIdx = findHeaderIdx('ESCALE', 'STATION', 'AEROPORT', 'BASE');
+        const entityIdx = findHeaderIdx('ENTITE', 'ENTITY', 'SOCIETEENTITE');
+        const companyIdx = findHeaderIdx('ENTREPRISE', 'COMPANY', 'SOCIETE', 'CLIENT', 'ORGANISATION');
+        const telMobileIdx = findHeaderIdx('MOBILE', 'PORTABLE', 'TELEPHONEMOBILE', 'TELPORTABLE', 'GSM', 'CELL');
+        const telFixeIdx = findHeaderIdx('FIXE', 'TELEPHONEFIXE', 'TELFIXE', 'STAND');
+        // Generic phone fallback if neither specific is found
+        const telGenericIdx = findHeaderIdx('TELEPHONE', 'TEL', 'PHONE');
+        const emailIdx = findHeaderIdx('MAIL', 'EMAIL', 'COURRIEL', 'EMAILPRO');
+        const serviceIdx = findHeaderIdx('SERVICE', 'DEPARTEMENT', 'DEP', 'SERVICEPRO');
+        const posteIdx = findHeaderIdx('POSTE', 'FONCTION', 'JOB', 'POSITION', 'TITREPOSTE', 'ROLE');
+        const commentIdx = findHeaderIdx('COMMENTAIRE', 'COMMENT', 'COMMENTAIRES', 'REMARQUE', 'NOTE', 'NOTES');
+
+        if (nomIdx === -1 && prenomIdx === -1 && fullNameIdx === -1) {
+          return {
+            success: false,
+            message: "Colonnes 'Nom' ou 'Prénom' obligatoires introuvables. Format attendu : Genre, Nom, Prénom, Escale, Entité, Entreprise, Téléphone mobile, Téléphone fixe, E-mail, Service, Poste, Commentaire."
+          };
+        }
+
+        const newOrUpdatedContacts: Contact[] = [];
+        let createdCount = 0;
+        let updatedCount = 0;
+
+        // Clone current contacts if append mode to handle updates vs creations
+        const contactMap = new Map<string, Contact>();
+        if (mode === 'append') {
+          contacts.forEach(c => {
+            const key = `${c.lastName.trim().toLowerCase()}_${c.firstName.trim().toLowerCase()}_${c.escale.trim().toLowerCase()}`;
+            contactMap.set(key, c);
+          });
+        }
+
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.replace(/^"|"$/g, '').trim());
+          if (row.length < 1) continue;
+
+          let lName = nomIdx !== -1 && row[nomIdx] ? row[nomIdx].trim() : '';
+          let fName = prenomIdx !== -1 && row[prenomIdx] ? row[prenomIdx].trim() : '';
+
+          // If individual fields were not found or empty, try extracting from full name column
+          if ((!lName || !fName) && fullNameIdx !== -1 && row[fullNameIdx]) {
+            const fullVal = row[fullNameIdx].trim();
+            const parts = fullVal.split(/\s+/);
+            if (parts.length >= 2) {
+              if (!lName) lName = parts[0];
+              if (!fName) fName = parts.slice(1).join(' ');
+            } else if (!lName && !fName) {
+              lName = fullVal;
+              fName = '';
+            }
+          }
+
+          // Skip completely empty contact rows
+          if (!lName && !fName) continue;
+
+          let rawGenre = genreIdx !== -1 && row[genreIdx] ? row[genreIdx].trim() : 'M.';
+          if (rawGenre.toLowerCase().startsWith('mme') || rawGenre.toLowerCase().startsWith('f') || rawGenre.toLowerCase() === 'madame') {
+            rawGenre = 'Mme';
+          } else if (rawGenre.toLowerCase().startsWith('m') || rawGenre.toLowerCase() === 'monsieur') {
+            rawGenre = 'M.';
+          }
+
+          const rawEscale = escaleIdx !== -1 && row[escaleIdx] ? row[escaleIdx].trim().toUpperCase() : 'BOD';
+          const rawEntity = entityIdx !== -1 && row[entityIdx] ? row[entityIdx].trim().toUpperCase() : 'HUBJOB';
+          const rawCompany = companyIdx !== -1 && row[companyIdx] ? row[companyIdx].trim() : '';
+          const rawMobile = telMobileIdx !== -1 && row[telMobileIdx] ? row[telMobileIdx].trim() : (telGenericIdx !== -1 && row[telGenericIdx] ? row[telGenericIdx].trim() : '');
+          const rawLandline = telFixeIdx !== -1 && row[telFixeIdx] ? row[telFixeIdx].trim() : '';
+          const rawEmail = emailIdx !== -1 && row[emailIdx] ? row[emailIdx].trim() : '';
+          const rawService = serviceIdx !== -1 && row[serviceIdx] ? row[serviceIdx].trim() : '';
+          const rawPoste = posteIdx !== -1 && row[posteIdx] ? row[posteIdx].trim() : '';
+          const rawComment = commentIdx !== -1 && row[commentIdx] ? row[commentIdx].trim() : '';
+
+          const formattedLastName = lName.toUpperCase();
+          const formattedFirstName = fName ? fName.charAt(0).toUpperCase() + fName.slice(1) : '';
+
+          const dedupeKey = `${formattedLastName.toLowerCase()}_${formattedFirstName.toLowerCase()}_${rawEscale.toLowerCase()}`;
+          const existing = contactMap.get(dedupeKey);
+
+          if (existing && mode === 'append') {
+            // Update existing contact
+            const updatedContact: Contact = {
+              ...existing,
+              genre: rawGenre || existing.genre,
+              lastName: formattedLastName || existing.lastName,
+              firstName: formattedFirstName || existing.firstName,
+              escale: rawEscale || existing.escale,
+              entity: rawEntity || existing.entity,
+              company: rawCompany || existing.company,
+              mobilePhone: rawMobile || existing.mobilePhone,
+              landlinePhone: rawLandline || existing.landlinePhone,
+              email: rawEmail || existing.email,
+              service: rawService || existing.service,
+              position: rawPoste || existing.position,
+              comment: rawComment || existing.comment,
+              updatedAt: new Date().toISOString()
+            };
+            contactMap.set(dedupeKey, updatedContact);
+            updatedCount++;
+          } else {
+            // Create new contact
+            const newContact: Contact = {
+              id: 'contact-' + i + '-' + Math.random().toString(36).substr(2, 6),
+              genre: rawGenre,
+              lastName: formattedLastName,
+              firstName: formattedFirstName,
+              escale: rawEscale,
+              entity: rawEntity,
+              company: rawCompany || undefined,
+              mobilePhone: rawMobile || undefined,
+              landlinePhone: rawLandline || undefined,
+              email: rawEmail || undefined,
+              service: rawService || undefined,
+              position: rawPoste || undefined,
+              comment: rawComment || undefined,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            contactMap.set(dedupeKey, newContact);
+            createdCount++;
+          }
+        }
+
+        const finalContactsList = Array.from(contactMap.values());
+
+        if (finalContactsList.length === 0 && (createdCount + updatedCount === 0)) {
+          return { success: false, message: "Aucun contact valide n'a pu être extrait du fichier." };
+        }
+
+        if (mode === 'replace') {
+          await clearSupabaseTable('contacts', handleSupabaseWriteError);
+          await clearFirestoreCollection('contacts');
+          setContacts(finalContactsList);
+          createdCount = finalContactsList.length;
+          updatedCount = 0;
+        } else {
+          setContacts(finalContactsList);
+        }
+
+        // Save to Firestore and Supabase
+        saveBulkToFirestore('contacts', finalContactsList);
+        const supaOk = await saveBulkToSupabase('contacts', finalContactsList, handleSupabaseWriteError);
+
+        const feedbackMsg = mode === 'replace'
+          ? `${createdCount} contacts importés avec succès (Remplacement complet de la base).`
+          : `${createdCount} contacts créés, ${updatedCount} contacts mis à jour avec succès.`;
+
+        addEvent(`Répertoire de contacts mis à jour (${mode === 'replace' ? 'Remplacement' : 'Consolidation'}) : ${createdCount} créés, ${updatedCount} actualisés.`, 'success');
+
+        return {
+          success: true,
+          message: `Félicitations ! ${feedbackMsg}${!supaOk ? ' [Attention: Avertissement Supabase]' : ''}`,
+          count: createdCount + updatedCount
         };
       }
 
@@ -1889,6 +2089,7 @@ export default function App() {
               modulesCatalog={modulesCatalog}
               collaborators={collaborators}
               trainingLogs={trainingLogs}
+              contacts={contacts}
             />
           )}
 
@@ -2058,6 +2259,7 @@ export default function App() {
               onAddContact={handleAddContact}
               onUpdateContact={handleUpdateContact}
               onDeleteContact={handleDeleteContact}
+              onClearAllContacts={handleClearAllContacts}
               onClose={() => setIsContactsDirectoryOpen(false)}
             />
           </div>

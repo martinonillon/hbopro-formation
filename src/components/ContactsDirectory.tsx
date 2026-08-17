@@ -34,6 +34,7 @@ interface ContactsDirectoryProps {
   onAddContact: (contact: Omit<Contact, 'id' | 'createdAt'>) => void;
   onUpdateContact: (contact: Contact) => void;
   onDeleteContact: (contactId: string) => void;
+  onClearAllContacts?: () => void;
   onClose?: () => void;
 }
 
@@ -42,6 +43,7 @@ export default function ContactsDirectory({
   onAddContact,
   onUpdateContact,
   onDeleteContact,
+  onClearAllContacts,
   onClose
 }: ContactsDirectoryProps) {
   // Filters state
@@ -55,6 +57,7 @@ export default function ContactsDirectory({
   const [isEditingDetail, setIsEditingDetail] = useState(false);
   const [phonePopupContact, setPhonePopupContact] = useState<Contact | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // New Contact Form State
@@ -418,8 +421,20 @@ export default function ContactsDirectory({
             )}
           </div>
 
-          {/* Actions: Nouveau & Export */}
+          {/* Actions: Nouveau, Export, Purge */}
           <div className="flex items-center gap-2 shrink-0">
+            {onClearAllContacts && contacts.length > 0 && (
+              <button
+                onClick={() => setIsClearModalOpen(true)}
+                className="h-10 px-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Supprimer tous les contacts du répertoire (purger la base)"
+                id="btn-clear-all-contacts"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span className="hidden sm:inline">Vider le répertoire</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 resetNewForm();
@@ -602,14 +617,14 @@ export default function ContactsDirectory({
       )}
 
       {/* ========================================================================= */}
-      {/* 3. MODAL DE CRÉATION : "NOUVEAU CONTACT" (Centré en haut de page)          */}
+      {/* 3. MODAL DE CRÉATION : "NOUVEAU CONTACT" (Centré et responsive)          */}
       {/* ========================================================================= */}
       {isNewModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-3 sm:p-4 pt-10 sm:pt-14 animate-fade-in" id="modal-new-contact">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in" id="modal-new-contact">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
             
-            {/* Header */}
-            <div className="bg-[#082C66] px-5 py-4 text-white flex items-center justify-between">
+            {/* Header (Fixe en haut) */}
+            <div className="bg-[#082C66] px-5 py-4 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
                   <Plus className="w-5 h-5 text-[#ffde59]" />
@@ -629,7 +644,8 @@ export default function ContactsDirectory({
             </div>
 
             {/* Form */}
-            <form onSubmit={handleCreateContact} className="p-5 sm:p-6 space-y-4">
+            <form onSubmit={handleCreateContact} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
               
               {/* Row 1: Genre, Nom, Prénom */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -857,12 +873,14 @@ export default function ContactsDirectory({
                 />
               </div>
 
-              {/* Actions */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              </div>
+
+              {/* Actions (Fixes en bas) */}
+              <div className="p-4 sm:px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsNewModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all cursor-pointer"
                 >
                   Annuler
                 </button>
@@ -885,11 +903,11 @@ export default function ContactsDirectory({
       {/* 4. POP-UP TÉLÉPHONE RAPIDE (Numéros en gros)                              */}
       {/* ========================================================================= */}
       {phonePopupContact && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" id="modal-phone-quick">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in" id="modal-phone-quick">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
             
-            {/* Header */}
-            <div className="bg-gradient-to-r from-[#082C66] to-[#0062FF] px-5 py-4 text-white flex items-center justify-between">
+            {/* Header (Fixe) */}
+            <div className="bg-gradient-to-r from-[#082C66] to-[#0062FF] px-5 py-4 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
                   <PhoneCall className="w-5 h-5 text-[#ffde59]" />
@@ -910,7 +928,7 @@ export default function ContactsDirectory({
             </div>
 
             {/* Content with Big Phone Numbers */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               
               {/* Mobile Phone Block */}
               <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100 space-y-2">
@@ -991,8 +1009,8 @@ export default function ContactsDirectory({
 
             </div>
 
-            {/* Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+            {/* Footer (Fixe) */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end shrink-0">
               <button
                 onClick={() => setPhonePopupContact(null)}
                 className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
@@ -1009,11 +1027,11 @@ export default function ContactsDirectory({
       {/* 5. FICHE DÉTAILLÉE : CONSULTATION / ÉDITION / SUPPRESSION                  */}
       {/* ========================================================================= */}
       {detailContact && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-3 sm:p-4 pt-8 sm:pt-12 animate-fade-in" id="modal-detail-contact">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in" id="modal-detail-contact">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all max-h-[90vh] flex flex-col">
             
-            {/* Header */}
-            <div className="bg-[#082C66] px-5 py-4 text-white flex items-center justify-between">
+            {/* Header (Fixe en haut) */}
+            <div className="bg-[#082C66] px-5 py-4 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center font-black text-sm text-[#ffde59]">
                   {detailContact.firstName[0]}{detailContact.lastName[0]}
@@ -1049,150 +1067,152 @@ export default function ContactsDirectory({
             {/* Body */}
             {isEditingDetail ? (
               /* --- MODE ÉDITION --- */
-              <form onSubmit={handleSaveDetail} className="p-5 sm:p-6 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-3 space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Genre</label>
-                    <select
-                      value={editForm.genre || 'M.'}
-                      onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    >
-                      <option value="M.">M.</option>
-                      <option value="Mme">Mme</option>
-                    </select>
+              <form onSubmit={handleSaveDetail} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div className="sm:col-span-3 space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Genre</label>
+                      <select
+                        value={editForm.genre || 'M.'}
+                        onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      >
+                        <option value="M.">M.</option>
+                        <option value="Mme">Mme</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Nom *</label>
+                      <input
+                        type="text"
+                        required
+                        value={editForm.lastName || ''}
+                        onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-4 space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Prénom *</label>
+                      <input
+                        type="text"
+                        required
+                        value={editForm.firstName || ''}
+                        onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      />
+                    </div>
                   </div>
 
-                  <div className="sm:col-span-5 space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Nom *</label>
-                    <input
-                      type="text"
-                      required
-                      value={editForm.lastName || ''}
-                      onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold uppercase text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Escale</label>
+                      <select
+                        value={editForm.escale || CONTACT_ESCALES[0]}
+                        onChange={(e) => setEditForm({ ...editForm, escale: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      >
+                        {CONTACT_ESCALES.map(esc => (
+                          <option key={esc} value={esc}>{esc}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Entité</label>
+                      <select
+                        value={editForm.entity || CONTACT_ENTITIES[0]}
+                        onChange={(e) => setEditForm({ ...editForm, entity: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      >
+                        {CONTACT_ENTITIES.map(ent => (
+                          <option key={ent} value={ent}>{ent}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="sm:col-span-4 space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Prénom *</label>
-                    <input
-                      type="text"
-                      required
-                      value={editForm.firstName || ''}
-                      onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    />
-                  </div>
-                </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Entreprise</label>
+                      <input
+                        type="text"
+                        value={editForm.company || ''}
+                        onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      />
+                    </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Service</label>
+                      <input
+                        type="text"
+                        value={editForm.service || ''}
+                        onChange={(e) => setEditForm({ ...editForm, service: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Poste</label>
+                      <input
+                        type="text"
+                        value={editForm.position || ''}
+                        onChange={(e) => setEditForm({ ...editForm, position: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Téléphone mobile</label>
+                      <input
+                        type="tel"
+                        value={editForm.mobilePhone || ''}
+                        onChange={(e) => setEditForm({ ...editForm, mobilePhone: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Téléphone fixe</label>
+                      <input
+                        type="tel"
+                        value={editForm.landlinePhone || ''}
+                        onChange={(e) => setEditForm({ ...editForm, landlinePhone: e.target.value })}
+                        className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Escale</label>
-                    <select
-                      value={editForm.escale || CONTACT_ESCALES[0]}
-                      onChange={(e) => setEditForm({ ...editForm, escale: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    >
-                      {CONTACT_ESCALES.map(esc => (
-                        <option key={esc} value={esc}>{esc}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Entité</label>
-                    <select
-                      value={editForm.entity || CONTACT_ENTITIES[0]}
-                      onChange={(e) => setEditForm({ ...editForm, entity: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    >
-                      {CONTACT_ENTITIES.map(ent => (
-                        <option key={ent} value={ent}>{ent}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Entreprise</label>
+                    <label className="text-xs font-bold text-slate-700">Adresse e-mail</label>
                     <input
-                      type="text"
-                      value={editForm.company || ''}
-                      onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+                      type="email"
+                      value={editForm.email || ''}
+                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                       className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Service</label>
-                    <input
-                      type="text"
-                      value={editForm.service || ''}
-                      onChange={(e) => setEditForm({ ...editForm, service: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Poste</label>
-                    <input
-                      type="text"
-                      value={editForm.position || ''}
-                      onChange={(e) => setEditForm({ ...editForm, position: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
+                    <label className="text-xs font-bold text-slate-700">Commentaire / Notes</label>
+                    <textarea
+                      rows={2}
+                      value={editForm.comment || ''}
+                      onChange={(e) => setEditForm({ ...editForm, comment: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none resize-none"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Téléphone mobile</label>
-                    <input
-                      type="tel"
-                      value={editForm.mobilePhone || ''}
-                      onChange={(e) => setEditForm({ ...editForm, mobilePhone: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700">Téléphone fixe</label>
-                    <input
-                      type="tel"
-                      value={editForm.landlinePhone || ''}
-                      onChange={(e) => setEditForm({ ...editForm, landlinePhone: e.target.value })}
-                      className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Adresse e-mail</label>
-                  <input
-                    type="email"
-                    value={editForm.email || ''}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className="w-full h-9.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700">Commentaire / Notes</label>
-                  <textarea
-                    rows={2}
-                    value={editForm.comment || ''}
-                    onChange={(e) => setEditForm({ ...editForm, comment: e.target.value })}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] outline-none resize-none"
-                  />
-                </div>
-
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <div className="p-4 sm:px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsEditingDetail(false)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                    className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all cursor-pointer"
                   >
                     Annuler
                   </button>
@@ -1206,223 +1226,273 @@ export default function ContactsDirectory({
               </form>
             ) : (
               /* --- MODE CONSULTATION COMPLÈTE --- */
-              <div className="p-5 sm:p-6 space-y-5">
-                
-                {/* 2-Column Info Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
                   
-                  {/* Left Column: Organization Details */}
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#082C66] flex items-center gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-[#0062FF]" />
-                      Organisation & Rattachement
-                    </h4>
+                  {/* 2-Column Info Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    
+                    {/* Left Column: Organization Details */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[#082C66] flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-[#0062FF]" />
+                        Organisation & Rattachement
+                      </h4>
 
-                    <div className="space-y-2 text-xs">
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Escale & Entité</span>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {/* Escale : Couleurs KPI */}
-                          <span className={`px-2 py-0.5 rounded text-xs font-black border ${getEscaleStyle(detailContact.escale).bg} ${getEscaleStyle(detailContact.escale).text} ${getEscaleStyle(detailContact.escale).border}`}>
-                            {detailContact.escale}
-                          </span>
-                          {/* Entité : Toujours bleu marine */}
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-[#082C66] text-white border border-[#082C66]">
-                            {detailContact.entity}
-                          </span>
+                      <div className="space-y-2 text-xs">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold uppercase">Escale & Entité</span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {/* Escale : Couleurs KPI */}
+                            <span className={`px-2 py-0.5 rounded text-xs font-black border ${getEscaleStyle(detailContact.escale).bg} ${getEscaleStyle(detailContact.escale).text} ${getEscaleStyle(detailContact.escale).border}`}>
+                              {detailContact.escale}
+                            </span>
+                            {/* Entité : Toujours bleu marine */}
+                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-[#082C66] text-white border border-[#082C66]">
+                              {detailContact.entity}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold uppercase">Entreprise</span>
+                          <span className="font-semibold text-slate-800">{detailContact.company || '—'}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold uppercase">Service</span>
+                          <span className="font-medium text-slate-800">{detailContact.service || '—'}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold uppercase">Poste</span>
+                          <span className="font-medium text-slate-800">{detailContact.position || '—'}</span>
                         </div>
                       </div>
+                    </div>
 
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Entreprise</span>
-                        <span className="font-semibold text-slate-800">{detailContact.company || '—'}</span>
-                      </div>
+                    {/* Right Column: Contact Details */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[#082C66] flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-[#0062FF]" />
+                        Coordonnées directes
+                      </h4>
 
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Service</span>
-                        <span className="font-medium text-slate-800">{detailContact.service || '—'}</span>
-                      </div>
+                      <div className="space-y-2 text-xs">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold uppercase">Téléphone mobile</span>
+                          {detailContact.mobilePhone ? (
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="font-bold text-[#082C66]">{detailContact.mobilePhone}</span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => copyToClipboard(detailContact.mobilePhone!, 'detail-mobile')}
+                                  className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded"
+                                  title="Copier"
+                                >
+                                  {copiedField === 'detail-mobile' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                                <a
+                                  href={`tel:${detailContact.mobilePhone.replace(/\s+/g, '')}`}
+                                  className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+                                  title="Appeler"
+                                >
+                                  <Phone className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">Non renseigné</span>
+                          )}
+                        </div>
 
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Poste</span>
-                        <span className="font-medium text-slate-800">{detailContact.position || '—'}</span>
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold uppercase">Téléphone fixe</span>
+                          {detailContact.landlinePhone ? (
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="font-medium text-slate-800">{detailContact.landlinePhone}</span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => copyToClipboard(detailContact.landlinePhone!, 'detail-fixe')}
+                                  className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded"
+                                  title="Copier"
+                                >
+                                  {copiedField === 'detail-fixe' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                                <a
+                                  href={`tel:${detailContact.landlinePhone.replace(/\s+/g, '')}`}
+                                  className="p-1 text-slate-700 hover:bg-slate-200 rounded"
+                                  title="Appeler"
+                                >
+                                  <Phone className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">Non renseigné</span>
+                          )}
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400 block text-[10px] font-semibold uppercase">Adresse e-mail</span>
+                          {detailContact.email ? (
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="font-semibold text-slate-800 truncate max-w-[180px]" title={detailContact.email}>
+                                {detailContact.email}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => copyToClipboard(detailContact.email!, 'detail-email')}
+                                  className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded"
+                                  title="Copier"
+                                >
+                                  {copiedField === 'detail-email' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                                <a
+                                  href={`mailto:${detailContact.email}`}
+                                  className="p-1 text-emerald-600 hover:bg-emerald-100 rounded"
+                                  title="Envoyer un e-mail"
+                                >
+                                  <Mail className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">Non renseigné</span>
+                          )}
+                        </div>
                       </div>
                     </div>
+
                   </div>
 
-                  {/* Right Column: Contact Details */}
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#082C66] flex items-center gap-1.5">
-                      <Phone className="w-3.5 h-3.5 text-[#0062FF]" />
-                      Coordonnées directes
-                    </h4>
-
-                    <div className="space-y-2 text-xs">
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Téléphone mobile</span>
-                        {detailContact.mobilePhone ? (
-                          <div className="flex items-center justify-between mt-0.5">
-                            <span className="font-bold text-[#082C66]">{detailContact.mobilePhone}</span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => copyToClipboard(detailContact.mobilePhone!, 'detail-mobile')}
-                                className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded"
-                                title="Copier"
-                              >
-                                {copiedField === 'detail-mobile' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                              </button>
-                              <a
-                                href={`tel:${detailContact.mobilePhone.replace(/\s+/g, '')}`}
-                                className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                                title="Appeler"
-                              >
-                                <Phone className="w-3.5 h-3.5" />
-                              </a>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic">Non renseigné</span>
-                        )}
-                      </div>
-
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Téléphone fixe</span>
-                        {detailContact.landlinePhone ? (
-                          <div className="flex items-center justify-between mt-0.5">
-                            <span className="font-medium text-slate-800">{detailContact.landlinePhone}</span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => copyToClipboard(detailContact.landlinePhone!, 'detail-fixe')}
-                                className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded"
-                                title="Copier"
-                              >
-                                {copiedField === 'detail-fixe' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                              </button>
-                              <a
-                                href={`tel:${detailContact.landlinePhone.replace(/\s+/g, '')}`}
-                                className="p-1 text-slate-700 hover:bg-slate-200 rounded"
-                                title="Appeler"
-                              >
-                                <Phone className="w-3.5 h-3.5" />
-                              </a>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic">Non renseigné</span>
-                        )}
-                      </div>
-
-                      <div>
-                        <span className="text-slate-400 block text-[10px] font-semibold uppercase">Adresse e-mail</span>
-                        {detailContact.email ? (
-                          <div className="flex items-center justify-between mt-0.5">
-                            <span className="font-semibold text-slate-800 truncate max-w-[180px]" title={detailContact.email}>
-                              {detailContact.email}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => copyToClipboard(detailContact.email!, 'detail-email')}
-                                className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded"
-                                title="Copier"
-                              >
-                                {copiedField === 'detail-email' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                              </button>
-                              <a
-                                href={`mailto:${detailContact.email}`}
-                                className="p-1 text-emerald-600 hover:bg-emerald-100 rounded"
-                                title="Envoyer un e-mail"
-                              >
-                                <Mail className="w-3.5 h-3.5" />
-                              </a>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic">Non renseigné</span>
-                        )}
-                      </div>
+                  {/* Commentaire Section */}
+                  {detailContact.comment && (
+                    <div className="bg-amber-50/60 rounded-xl p-3.5 border border-amber-200/80 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
+                        Commentaire / Instructions
+                      </span>
+                      <p className="text-xs text-amber-950 leading-relaxed whitespace-pre-wrap">
+                        {detailContact.comment}
+                      </p>
                     </div>
-                  </div>
+                  )}
 
                 </div>
 
-                {/* Commentaire Section */}
-                {detailContact.comment && (
-                  <div className="bg-amber-50/60 rounded-xl p-3.5 border border-amber-200/80 space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900">
-                      Commentaire / Instructions
-                    </span>
-                    <p className="text-xs text-amber-950 leading-relaxed whitespace-pre-wrap">
-                      {detailContact.comment}
-                    </p>
-                  </div>
-                )}
+                {/* Delete Confirmation Warning or Action Buttons (Pied fixe toujours visible) */}
+                <div className="p-4 sm:px-6 bg-slate-50 border-t border-slate-200 shrink-0">
+                  {deleteConfirmId === detailContact.id ? (
+                    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+                      <div className="flex items-center gap-2.5 text-rose-800 text-xs font-semibold">
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>Confirmer la suppression définitive de ce contact ?</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-100 cursor-pointer"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmDelete(detailContact.id)}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmId(detailContact.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-rose-600 hover:bg-rose-100/70 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        id="btn-delete-contact"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Supprimer</span>
+                      </button>
 
-                {/* Delete Confirmation Warning or Action Buttons */}
-                {deleteConfirmId === detailContact.id ? (
-                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
-                    <div className="flex items-center gap-2.5 text-rose-800 text-xs font-semibold">
-                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>Confirmer la suppression définitive de ce contact ?</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDetailContact(null);
+                            setIsEditingDetail(false);
+                          }}
+                          className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-all cursor-pointer"
+                        >
+                          Fermer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditForm({ ...detailContact });
+                            setIsEditingDetail(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#082C66] hover:bg-[#0062FF] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                          id="btn-edit-contact"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          <span>Modifier</span>
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmId(null)}
-                        className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-100 cursor-pointer"
-                      >
-                        Annuler
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleConfirmDelete(detailContact.id)}
-                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
-                      >
-                        Supprimer
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmId(detailContact.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                      id="btn-delete-contact"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Supprimer</span>
-                    </button>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDetailContact(null);
-                          setIsEditingDetail(false);
-                        }}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
-                      >
-                        Fermer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditForm({ ...detailContact });
-                          setIsEditingDetail(true);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#082C66] hover:bg-[#0062FF] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-                        id="btn-edit-contact"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        <span>Modifier</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmation : Vider tout le répertoire */}
+      {isClearModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" id="modal-clear-contacts-confirm">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Vider le répertoire</h3>
+                <p className="text-xs text-slate-500">Action irréversible sur la base de données</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              Êtes-vous sûr de vouloir supprimer l'intégralité des <strong>{contacts.length} contacts</strong> du répertoire ? Cette action effacera les données locales et synchronisées dans le cloud.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsClearModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onClearAllContacts) {
+                    onClearAllContacts();
+                  }
+                  setIsClearModalOpen(false);
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                id="btn-confirm-clear-all-contacts"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Oui, tout effacer</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -17,24 +17,26 @@ import {
   Trash2,
   Table,
   FileCheck,
-  ArrowRight
+  ArrowRight,
+  BookUser
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { TrainingModule, Collaborator, TrainingLog } from '../types';
+import { TrainingModule, Collaborator, TrainingLog, Contact } from '../types';
 import { normalizeDateToISO } from '../utils/dateUtils';
 
 interface ConsolidationPanelProps {
   onImportCSV: (
     csvText: string, 
-    type: 'modules' | 'agents' | 'history', 
+    type: 'modules' | 'agents' | 'history' | 'contacts', 
     mode: 'append' | 'replace'
   ) => Promise<{ success: boolean; message: string; count?: number }> | { success: boolean; message: string; count?: number };
   modulesCatalog?: TrainingModule[];
   collaborators?: Collaborator[];
   trainingLogs?: TrainingLog[];
+  contacts?: Contact[];
 }
 
-type ImportType = 'modules' | 'agents' | 'history';
+type ImportType = 'modules' | 'agents' | 'history' | 'contacts';
 type ImportMode = 'append' | 'replace';
 
 interface UploadedFileInfo {
@@ -47,7 +49,8 @@ export default function ConsolidationPanel({
   onImportCSV,
   modulesCatalog = [],
   collaborators = [],
-  trainingLogs = []
+  trainingLogs = [],
+  contacts = []
 }: ConsolidationPanelProps) {
   const [importType, setImportType] = useState<ImportType>('modules');
   const [importMode, setImportMode] = useState<ImportMode>('append');
@@ -386,6 +389,25 @@ export default function ConsolidationPanel({
 
       csvContent = [headers.join(','), ...rows].join('\n');
       fileName = `sauvegarde_historique_suivi_${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (importType === 'contacts') {
+      const headers = ['Genre', 'Nom', 'Prénom', 'Escale', 'Entité', 'Entreprise', 'Service', 'Poste', 'Téléphone mobile', 'Téléphone fixe', 'E-mail', 'Commentaire'];
+      const rows = (contacts || []).map(c => [
+        c.genre || '',
+        c.lastName || '',
+        c.firstName || '',
+        c.escale || '',
+        c.entity || '',
+        c.company || '',
+        c.service || '',
+        c.position || '',
+        c.mobilePhone || '',
+        c.landlinePhone || '',
+        c.email || '',
+        c.comment || ''
+      ].map(escapeCell).join(','));
+
+      csvContent = [headers.join(','), ...rows].join('\n');
+      fileName = `sauvegarde_repertoire_contacts_${new Date().toISOString().split('T')[0]}.csv`;
     }
 
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -422,6 +444,16 @@ export default function ConsolidationPanel({
           placeholder: `NOM,PRENOM,ESCALE,SERVICE,MODULE,CYCLE,FORMATEUR,ID,TYPE,DATE D,DATE F,D1,F1,D2,F2,MAD EA,CTT HBO,CONVOC,EMRG,ATTEST,RESULTAT,CONSIGNE,DATE PAYE,COMMENTAIRE,N° FACT,MONTANT,VAL° GED,VISA
 DUPONT,Thomas,BOD,PISTE,REGLEMENTAIRE - SST - INITIAL,INI,Hubjob - Interne,ID-4235,Présentiel,2026-05-10,2026-05-12,08:00,12:00,13:00,16:00,True,False,True,True,True,Réussite,Paye OK,2026-05-15,Heures validées,FAC-2026-001,450,2026-05-14,Validée
 MARTIN,Sarah,TLS,PASSAGE,QSE - GESTION DES CONFLITS,PER,EA,ID-9284,Présentiel,2026-07-12,2026-07-14,09:00,12:00,13:00,17:00,False,True,False,True,True,En cours,A payer,,,FAC-2026-002,380,,En attente`,
+        };
+      case 'contacts':
+        return {
+          title: "Répertoire de contacts (HubStation)",
+          desc: "Importez ou enrichissez votre carnet d'adresses et répertoire de contacts professionnels (escales, entités, clients, managers, etc.) via fichier Excel ou CSV.",
+          headers: "Genre, Nom, Prénom, Escale, Entité, Entreprise, Service, Poste, Téléphone mobile, Téléphone fixe, E-mail, Commentaire",
+          placeholder: `Genre,Nom,Prénom,Escale,Entité,Entreprise,Service,Poste,Téléphone mobile,Téléphone fixe,E-mail,Commentaire
+M.,DUPONT,Thomas,BOD,ALYZIA,Air France,PISTE,Superviseur Piste,0612345678,0556000000,t.dupont@alyzia.com,Responsable piste du matin
+Mme,MARTIN,Sarah,TLS,HUBJOB,,RECRUTEMENT,Chargée de recrutement,0798765432,,s.martin@hubjob.fr,Contact principal intérimaires
+M.,BERNARD,Julien,LYS,CAPRES,TotalEnergies,AVITAILLEMENT,Chef d'équipe,0601020304,0472000000,j.bernard@capres.fr,Astreinte week-end`,
         };
       case 'modules':
       default:
@@ -477,6 +509,17 @@ DIVERS - GESTION DU STRESS,Divers,CAMAS,Présentiel,DIV-STR`,
           id="import-type-history-btn"
         >
           <CalendarDays className="h-3.5 w-3.5" /> Suivi Historique (2025/2026)
+        </button>
+        <button
+          onClick={() => { setImportType('contacts'); setImportResult(null); }}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            importType === 'contacts'
+              ? 'bg-[#0062FF] text-white shadow-xs shadow-blue-600/10'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+          id="import-type-contacts-btn"
+        >
+          <BookUser className="h-3.5 w-3.5" /> Répertoire (Contacts)
         </button>
       </div>
 
