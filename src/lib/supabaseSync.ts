@@ -450,7 +450,8 @@ export function sanitizeItemForTable(tableName: string, item: any): Record<strin
   if (tableName === 'users') {
     const clean: Record<string, any> = {};
     clean.id = item.id;
-    clean.username = strOrEmpty(item.username);
+    clean.username = strOrEmpty(item.username || item.email);
+    clean.email = strOrEmpty(item.email || item.username);
     const fName = strOrEmpty(item.firstName || item.first_name);
     const lName = strOrEmpty(item.lastName || item.last_name);
     clean.firstName = fName;
@@ -459,6 +460,24 @@ export function sanitizeItemForTable(tableName: string, item: any): Record<strin
     clean.last_name = lName;
     clean.role = strOrEmpty(item.role || 'AGENT');
     clean.permissions = item.permissions || [];
+    const cAt = item.createdAt || item.created_at || new Date().toISOString();
+    clean.createdAt = cAt;
+    clean.created_at = cAt;
+    return clean;
+  }
+
+  if (tableName === 'registration_requests' || tableName === 'pending_users') {
+    const clean: Record<string, any> = {};
+    clean.id = item.id;
+    const fName = strOrEmpty(item.firstName || item.first_name);
+    const lName = strOrEmpty(item.lastName || item.last_name);
+    clean.firstName = fName;
+    clean.first_name = fName;
+    clean.lastName = lName;
+    clean.last_name = lName;
+    clean.email = strOrEmpty(item.email);
+    clean.role = strOrEmpty(item.role || 'AGENT');
+    clean.status = strOrEmpty(item.status || 'pending');
     const cAt = item.createdAt || item.created_at || new Date().toISOString();
     clean.createdAt = cAt;
     clean.created_at = cAt;

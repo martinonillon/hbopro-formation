@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Lock, 
   LogIn, 
@@ -16,10 +16,12 @@ import {
   Send,
   ShieldCheck,
   Check,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { AppUser, RegistrationRequest, validatePassword, DEFAULT_PROVISIONAL_PASSWORD } from '../types';
-import { DEFAULT_ADMIN_USER } from '../data/usersData';
+import { DEFAULT_ADMIN_USER, DEFAULT_READONLY_PERMISSIONS, normalizeUserPermissions } from '../data/usersData';
+import { supabase } from '../lib/supabase';
 
 interface LoginScreenProps {
   users: AppUser[];
@@ -42,6 +44,7 @@ export default function LoginScreen({
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   // Modals state
   const [isFirstLoginOpen, setIsFirstLoginOpen] = useState(false);
@@ -56,12 +59,13 @@ export default function LoginScreen({
   const [regEmail, setRegEmail] = useState('');
   const [regSubmitted, setRegSubmitted] = useState(false);
   const [regError, setRegError] = useState('');
+  const [isRegLoading, setIsRegLoading] = useState(false);
 
   // Forgot Password Form State
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
   const [forgotError, setForgotError] = useState('');
-  const [generatedResetLink, setGeneratedResetLink] = useState('');
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   // Reset Password Form State (Setting new password with 12-char rule)
   const [newPassword, setNewPassword] = useState('');
@@ -69,11 +73,45 @@ export default function LoginScreen({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resetPasswordError, setResetPasswordError] = useState('');
+  const [isResetLoading, setIsResetLoading] = useState(false);
 
   const passwordRules = validatePassword(newPassword);
 
-  // Submit Login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Supabase Auth: Listen for password recovery links (e.g. redirected from email)
+  useEffect(() => {
+    // Check URL parameters & hash for recovery token
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    if (
+      hash.includes('type=recovery') || 
+      hash.includes('access_token=') || 
+      search.includes('type=recovery') ||
+      search.includes('reset_token') ||
+      search.includes('setup_token')
+    ) {
+      setIsResetModalOpen(true);
+    }
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsResetModalOpen(true);
+        if (session?.user?.email) {
+          const userEmail = session.user.email.toLowerCase();
+          const found = users.find(u => (u.email && u.email.toLowerCase() === userEmail) || u.username.toLowerCase() === userEmail);
+          if (found) {
+            setResetTargetUser(found);
+          }
+        }
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, [users]);
+
+  // Submit Login via Supabase Auth (with graceful local fallback)
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -91,33 +129,74 @@ export default function LoginScreen({
       return;
     }
 
-    const effectiveUsers = users.length > 0 ? users : [DEFAULT_ADMIN_USER];
-    
-    // Find user by email or username (case-insensitive)
-    const foundUser = effectiveUsers.find(u => 
-      (u.email && u.email.toLowerCase() === cleanIdentifier.toLowerCase()) ||
-      u.username.toLowerCase() === cleanIdentifier.toLowerCase()
-    );
+    setIsLoading(true);
 
-    if (!foundUser) {
+    try {
+      // 1. Attempt Supabase Auth signInWithPassword
+      let supabaseUser: any = null;
+      try {
+        const { data, error: supaAuthErr } = await supabase.auth.signInWithPassword({
+          email: cleanIdentifier,
+          password: cleanPassword
+        });
+        if (!supaAuthErr && data?.user) {
+          supabaseUser = data.user;
+        }
+      } catch (authEx) {
+        console.warn("Supabase Auth signIn exception:", authEx);
+      }
+
+      if (supabaseUser) {
+        const effectiveUsers = users.length > 0 ? users : [DEFAULT_ADMIN_USER];
+        const matchedUser = effectiveUsers.find(u => 
+          (u.email && u.email.toLowerCase() === cleanIdentifier.toLowerCase()) ||
+          u.username.toLowerCase() === cleanIdentifier.toLowerCase() ||
+          u.id === supabaseUser.id
+        );
+
+        const resolvedUser: AppUser = matchedUser || {
+          id: supabaseUser.id || 'usr-' + Date.now(),
+          username: supabaseUser.email || cleanIdentifier,
+          email: supabaseUser.email || cleanIdentifier,
+          firstName: supabaseUser.user_metadata?.first_name || supabaseUser.user_metadata?.firstName || 'Utilisateur',
+          lastName: supabaseUser.user_metadata?.last_name || supabaseUser.user_metadata?.lastName || '',
+          role: supabaseUser.user_metadata?.role || 'Collaborateur',
+          permissions: { ...DEFAULT_READONLY_PERMISSIONS },
+          createdAt: new Date().toISOString()
+        };
+
+        setIsLoading(false);
+        onLogin(resolvedUser);
+        return;
+      }
+
+      // 2. Fallback: check matching user in local/synced user list
+      const effectiveUsers = users.length > 0 ? users : [DEFAULT_ADMIN_USER];
+      const foundUser = effectiveUsers.find(u => 
+        (u.email && u.email.toLowerCase() === cleanIdentifier.toLowerCase()) ||
+        u.username.toLowerCase() === cleanIdentifier.toLowerCase()
+      );
+
+      const expectedPassword = foundUser?.password || DEFAULT_PROVISIONAL_PASSWORD;
+
+      if (foundUser && cleanPassword === expectedPassword) {
+        setIsLoading(false);
+        onLogin(foundUser);
+        return;
+      }
+
+      // 3. Authentication failed: exact specified message
+      setIsLoading(false);
       setErrorMsg('Mot de passe incorrect. Veuillez vérifier votre identifiant et mot de passe ou cliquer sur "mot de passe oublié ?".');
-      return;
-    }
-
-    // Expected password is the user's defined password or the default provisional 'Hubstation2026!'
-    const expectedPassword = foundUser.password || DEFAULT_PROVISIONAL_PASSWORD;
-
-    if (cleanPassword !== expectedPassword) {
+    } catch (err) {
+      setIsLoading(false);
+      console.error("Login attempt error:", err);
       setErrorMsg('Mot de passe incorrect. Veuillez vérifier votre identifiant et mot de passe ou cliquer sur "mot de passe oublié ?".');
-      return;
     }
-
-    // Login successful
-    onLogin(foundUser);
   };
 
   // Handle First Login registration request
-  const handleFirstLoginSubmit = (e: React.FormEvent) => {
+  const handleFirstLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
 
@@ -137,24 +216,33 @@ export default function LoginScreen({
       return;
     }
 
-    if (onRequestRegistration) {
-      onRequestRegistration({
-        lastName: cleanNom,
-        firstName: cleanPrenom,
-        role: cleanPoste,
-        email: cleanMail
-      });
-    }
+    setIsRegLoading(true);
 
-    if (onLogEvent) {
-      onLogEvent(`Nouvelle demande d'inscription reçue de ${cleanPrenom} ${cleanNom} (${cleanMail}) pour le poste ${cleanPoste}. Notification transmise à martin@hubjob.fr.`, 'info');
-    }
+    try {
+      if (onRequestRegistration) {
+        await onRequestRegistration({
+          lastName: cleanNom,
+          firstName: cleanPrenom,
+          role: cleanPoste,
+          email: cleanMail
+        });
+      }
 
-    setRegSubmitted(true);
+      if (onLogEvent) {
+        onLogEvent(`Nouvelle demande d'inscription reçue de ${cleanPrenom} ${cleanNom} (${cleanMail}) pour le poste ${cleanPoste}. Notification transmise à martin@hubjob.fr.`, 'info');
+      }
+
+      setIsRegLoading(false);
+      setRegSubmitted(true);
+    } catch (err) {
+      setIsRegLoading(false);
+      console.error("Erreur enregistrement demande:", err);
+      setRegSubmitted(true);
+    }
   };
 
-  // Handle Forgot Password link request
-  const handleForgotPasswordSubmit = (e: React.FormEvent) => {
+  // Handle Forgot Password link request via Supabase Auth
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
 
@@ -164,31 +252,50 @@ export default function LoginScreen({
       return;
     }
 
-    const effectiveUsers = users.length > 0 ? users : [DEFAULT_ADMIN_USER];
-    const targetUser = effectiveUsers.find(u => u.email && u.email.toLowerCase() === cleanMail);
+    setIsForgotLoading(true);
 
-    // Create realistic reset link
-    const resetToken = 'rst-' + Math.random().toString(36).substr(2, 12) + '-' + Date.now().toString(36);
-    const linkUrl = `${window.location.origin}/?reset_token=${resetToken}&email=${encodeURIComponent(cleanMail)}`;
-    setGeneratedResetLink(linkUrl);
+    try {
+      // Call Supabase Auth resetPasswordForEmail
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanMail, {
+          redirectTo: window.location.origin
+        });
+        if (error) {
+          console.warn("Supabase auth resetPasswordForEmail info:", error.message);
+        }
+      } catch (authEx) {
+        console.warn("Supabase Auth reset exception:", authEx);
+      }
 
-    if (targetUser) {
-      setResetTargetUser(targetUser);
-      if (onLogEvent) {
-        onLogEvent(`E-mail de réinitialisation de mot de passe généré et envoyé à ${cleanMail} (Utilisateur: ${targetUser.firstName} ${targetUser.lastName})`, 'info');
+      const effectiveUsers = users.length > 0 ? users : [DEFAULT_ADMIN_USER];
+      const targetUser = effectiveUsers.find(u => 
+        (u.email && u.email.toLowerCase() === cleanMail) || 
+        u.username.toLowerCase() === cleanMail
+      );
+
+      if (targetUser) {
+        setResetTargetUser(targetUser);
+        if (onLogEvent) {
+          onLogEvent(`E-mail de réinitialisation de mot de passe envoyé à ${cleanMail} (${targetUser.firstName} ${targetUser.lastName}) via Supabase Auth.`, 'info');
+        }
+      } else {
+        setResetTargetUser(null);
+        if (onLogEvent) {
+          onLogEvent(`Demande de réinitialisation pour l'adresse ${cleanMail} traitée.`, 'info');
+        }
       }
-    } else {
-      setResetTargetUser(null);
-      if (onLogEvent) {
-        onLogEvent(`Demande de réinitialisation pour l'adresse ${cleanMail} reçue.`, 'info');
-      }
+
+      setIsForgotLoading(false);
+      setForgotSubmitted(true);
+    } catch (err) {
+      setIsForgotLoading(false);
+      console.error("Erreur forgot password:", err);
+      setForgotSubmitted(true);
     }
-
-    setForgotSubmitted(true);
   };
 
   // Handle setting a new password that strictly obeys the 12-char rules
-  const handleSaveNewPassword = (e: React.FormEvent) => {
+  const handleSaveNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetPasswordError('');
 
@@ -202,19 +309,41 @@ export default function LoginScreen({
       return;
     }
 
-    if (resetTargetUser && onResetPassword) {
-      onResetPassword(resetTargetUser.id, newPassword);
-      if (onLogEvent) {
-        onLogEvent(`Mot de passe réinitialisé avec succès pour ${resetTargetUser.firstName} ${resetTargetUser.lastName} (${resetTargetUser.username}).`, 'success');
-      }
-    }
+    setIsResetLoading(true);
 
-    setIsResetModalOpen(false);
-    setIsForgotPasswordOpen(false);
-    setSuccessMsg('Votre mot de passe a été mis à jour avec succès ! Vous pouvez maintenant vous connecter.');
-    setPasswordInput(newPassword);
-    if (resetTargetUser) {
-      setIdentifierInput(resetTargetUser.email || resetTargetUser.username);
+    try {
+      // 1. Update password in Supabase Auth if session active
+      try {
+        const { error: supaErr } = await supabase.auth.updateUser({
+          password: newPassword
+        });
+        if (supaErr) {
+          console.warn("Supabase auth.updateUser notice:", supaErr.message);
+        }
+      } catch (authEx) {
+        console.warn("Supabase auth updateUser exception:", authEx);
+      }
+
+      // 2. Update user in local/synced state
+      if (resetTargetUser && onResetPassword) {
+        onResetPassword(resetTargetUser.id, newPassword);
+        if (onLogEvent) {
+          onLogEvent(`Mot de passe réinitialisé avec succès pour ${resetTargetUser.firstName} ${resetTargetUser.lastName} (${resetTargetUser.email || resetTargetUser.username}).`, 'success');
+        }
+      }
+
+      setIsResetLoading(false);
+      setIsResetModalOpen(false);
+      setIsForgotPasswordOpen(false);
+      setSuccessMsg('Votre mot de passe a été mis à jour avec succès ! Vous pouvez maintenant vous connecter.');
+      setPasswordInput(newPassword);
+      if (resetTargetUser) {
+        setIdentifierInput(resetTargetUser.email || resetTargetUser.username);
+      }
+    } catch (err: any) {
+      setIsResetLoading(false);
+      console.error("Erreur mise à jour mot de passe:", err);
+      setResetPasswordError(err?.message || 'Erreur lors de la mise à jour du mot de passe.');
     }
   };
 
@@ -339,11 +468,21 @@ export default function LoginScreen({
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-3 px-4 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-[#0062FF]/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                disabled={isLoading}
+                className="w-full py-3 px-4 bg-[#0062FF] hover:bg-[#0062FF]/90 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-all shadow-md shadow-[#0062FF]/25 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                 id="login-submit-button"
               >
-                <LogIn className="w-4 h-4" />
-                Se connecter à l'application
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Connexion en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    <span>Se connecter à l'application</span>
+                  </>
+                )}
               </button>
             </div>
 
@@ -532,11 +671,21 @@ export default function LoginScreen({
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                      disabled={isRegLoading}
+                      className="px-5 py-2 bg-[#0062FF] hover:bg-[#0062FF]/90 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                       id="btn-submit-first-connection"
                     >
-                      <Send className="w-3.5 h-3.5" />
-                      Envoyer la demande
+                      {isRegLoading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Envoi en cours...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Envoyer la demande</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -660,11 +809,21 @@ export default function LoginScreen({
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                      disabled={isForgotLoading}
+                      className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                       id="btn-send-reset-link"
                     >
-                      <Send className="w-3.5 h-3.5" />
-                      Envoyer le lien de réinitialisation
+                      {isForgotLoading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Envoi en cours...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Envoyer le lien de réinitialisation</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -820,12 +979,21 @@ export default function LoginScreen({
                 </button>
                 <button
                   type="submit"
-                  disabled={!passwordRules.isValid || newPassword !== confirmPassword}
+                  disabled={isResetLoading || !passwordRules.isValid || newPassword !== confirmPassword}
                   className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                   id="btn-confirm-save-password"
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  Valider le mot de passe
+                  {isResetLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Validation en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Valider le mot de passe</span>
+                    </>
+                  )}
                 </button>
               </div>
 

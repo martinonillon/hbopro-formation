@@ -38,6 +38,7 @@ import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from
 import { deduplicateTrainingLogs } from './utils/deduplicateLogs';
 import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
 import { syncSupabaseTable, saveToSupabase, deleteFromSupabase, saveBulkToSupabase, checkAndMigrateLocalStorage, checkSupabaseHealth, clearSupabaseTable, fetchSessionDetails, fetchAllTrainingLogsFromSupabase } from './lib/supabaseSync';
+import { supabase } from './lib/supabase';
 
 // Sub-components
 import HomePortal from './components/HomePortal';
@@ -209,6 +210,11 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    try {
+      supabase.auth.signOut();
+    } catch (e) {
+      console.warn("Supabase signOut notice:", e);
+    }
     if (currentUser) {
       const timeString = new Date().toLocaleTimeString('fr-FR');
       const newEvent: RealTimeEvent = {

@@ -33,6 +33,7 @@ import {
   ALL_FULL_PERMISSIONS, 
   DEFAULT_READONLY_PERMISSIONS 
 } from '../data/usersData';
+import { supabase } from '../lib/supabase';
 
 interface AdminManagementProps {
   users: AppUser[];
@@ -202,6 +203,19 @@ export default function AdminManagement({
         onAddUser(newUser);
       }
 
+      // Trigger Supabase Auth password creation / invitation email link
+      try {
+        supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: window.location.origin
+        }).then(({ error }) => {
+          if (error) {
+            console.warn("Supabase Auth reset password email on creation notice:", error.message);
+          }
+        });
+      } catch (authEx) {
+        console.warn("Supabase Auth activation exception:", authEx);
+      }
+
       // Generate password setup notification
       const resetToken = 'reg-' + Math.random().toString(36).substr(2, 12);
       const setupLink = `${window.location.origin}/?setup_token=${resetToken}&email=${encodeURIComponent(cleanEmail)}`;
@@ -236,12 +250,26 @@ export default function AdminManagement({
   const handleTriggerPasswordReset = (targetUser: AppUser) => {
     if (isReadOnly) return;
     
+    const targetEmail = targetUser.email || `${targetUser.username.toLowerCase()}@hubjob.fr`;
+
     if (onSendPasswordResetEmail) {
       onSendPasswordResetEmail(targetUser);
     }
 
+    // Call Supabase Auth resetPasswordForEmail
+    try {
+      supabase.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: window.location.origin
+      }).then(({ error }) => {
+        if (error) {
+          console.warn("Supabase Auth resetPasswordForEmail response:", error.message);
+        }
+      });
+    } catch (authEx) {
+      console.warn("Supabase Auth reset exception:", authEx);
+    }
+
     const resetToken = 'rst-' + Math.random().toString(36).substr(2, 12);
-    const targetEmail = targetUser.email || `${targetUser.username.toLowerCase()}@hubjob.fr`;
     const resetUrl = `${window.location.origin}/?reset_token=${resetToken}&email=${encodeURIComponent(targetEmail)}`;
     
     setResetConfirmUser(targetUser);
