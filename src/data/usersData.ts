@@ -32,7 +32,9 @@ export const DEFAULT_READONLY_PERMISSIONS: UserAppPermissions = {
 
 export const DEFAULT_ADMIN_USER: AppUser = {
   id: 'usr-admin-default',
-  username: 'MOE0226',
+  username: 'martin@hubjob.fr',
+  email: 'martin@hubjob.fr',
+  password: 'Hubstation2026!',
   lastName: 'ONILLON MINÉE',
   firstName: 'Martin',
   role: 'Administrateur',

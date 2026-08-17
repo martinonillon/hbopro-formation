@@ -103,11 +103,63 @@ export type UserTabPermissions = UserAppPermissions;
 export interface AppUser {
   id: string;
   username: string; // Identifiant e.g. MOE0226 or AAA1234
+  email?: string;
+  password?: string; // Mot de passe (default: 'Hubstation2026!')
   lastName: string;
   firstName: string;
   role: string;
   permissions: UserAppPermissions;
   createdAt: string;
+}
+
+export interface RegistrationRequest {
+  id: string;
+  lastName: string;
+  firstName: string;
+  role: string; // Poste
+  email: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
+export interface PasswordResetToken {
+  id: string;
+  userId: string;
+  email: string;
+  token: string;
+  expiresAt: string;
+  createdAt: string;
+  used?: boolean;
+}
+
+export const DEFAULT_PROVISIONAL_PASSWORD = 'Hubstation2026!';
+
+export interface PasswordValidationResult {
+  isValid: boolean;
+  hasMinLength: boolean;
+  hasUppercase: boolean;
+  hasLowercase: boolean;
+  hasNumber: boolean;
+  hasSpecialChar: boolean;
+}
+
+export function validatePassword(password: string): PasswordValidationResult {
+  const hasMinLength = (password || '').length >= 12;
+  const hasUppercase = /[A-Z]/.test(password || '');
+  const hasLowercase = /[a-z]/.test(password || '');
+  const hasNumber = /[0-9]/.test(password || '');
+  const hasSpecialChar = /[^A-Za-z0-9]/.test(password || '');
+
+  return {
+    isValid: hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecialChar,
+    hasMinLength,
+    hasUppercase,
+    hasLowercase,
+    hasNumber,
+    hasSpecialChar
+  };
 }
 
 export interface Contact {

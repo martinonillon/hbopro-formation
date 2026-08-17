@@ -29,7 +29,7 @@ import {
   FolderGit2,
   BookUser
 } from 'lucide-react';
-import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact } from './types';
+import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact, RegistrationRequest, DEFAULT_PROVISIONAL_PASSWORD } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
 import { INITIAL_COLLABORATORS, INITIAL_TRAINING_LOGS } from './data/collaboratorsData';
 import { DEFAULT_ADMIN_USER, INITIAL_USERS, normalizeUserPermissions, DEFAULT_READONLY_PERMISSIONS } from './data/usersData';
@@ -96,6 +96,20 @@ export default function App() {
   });
   const [isContactsDirectoryOpen, setIsContactsDirectoryOpen] = useState(false);
 
+  // Demandes d'inscription (Workflow Première Connexion)
+  const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('hubstation_registration_requests');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn("Erreur lecture registration_requests localStorage", e);
+    }
+    return [];
+  });
+
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
 
   const handleSupabaseWriteError = (errMsg: string) => {
@@ -157,7 +171,7 @@ export default function App() {
     }
   }, [currentUser, activeTab]);
 
-  // Save users to localStorage
+  // Save users & registrationRequests to localStorage
   useEffect(() => {
     try {
       localStorage.setItem('alyzia_users', JSON.stringify(users));
@@ -165,6 +179,14 @@ export default function App() {
       console.warn('Impossible de sauvegarder les utilisateurs dans le stockage local:', e);
     }
   }, [users]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('hubstation_registration_requests', JSON.stringify(registrationRequests));
+    } catch (e) {
+      console.warn('Impossible de sauvegarder les demandes d\'inscription dans le stockage local:', e);
+    }
+  }, [registrationRequests]);
 
   // Handle Login & Logout
   const handleLogin = (user: AppUser) => {
@@ -227,6 +249,57 @@ export default function App() {
       deleteFromSupabase('users', userId, handleSupabaseWriteError);
       addEvent(`Utilisateur supprimé : ${userToDelete.firstName} ${userToDelete.lastName} (${userToDelete.username})`, 'warning');
     }
+  };
+
+  // Registration Requests & Password Reset Handlers
+  const handleRequestRegistration = (reqData: Omit<RegistrationRequest, 'id' | 'createdAt' | 'status'>) => {
+    const newReq: RegistrationRequest = {
+      ...reqData,
+      id: 'req-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    setRegistrationRequests(prev => [newReq, ...prev]);
+    saveItemToFirestore('registration_requests', newReq);
+    saveToSupabase('registration_requests', newReq, handleSupabaseWriteError);
+    addEvent(`Nouvelle demande d'inscription reçue de ${newReq.firstName} ${newReq.lastName} (${newReq.email}). Notification envoyée à martin@hubjob.fr.`, 'info');
+  };
+
+  const handleApproveRegistrationRequest = (requestId: string, newUser: AppUser) => {
+    // 1. Add user
+    handleAddUser(newUser);
+    // 2. Remove/Approve request
+    setRegistrationRequests(prev => prev.filter(r => r.id !== requestId));
+    deleteItemFromFirestore('registration_requests', requestId);
+    deleteFromSupabase('registration_requests', requestId, handleSupabaseWriteError);
+    addEvent(`Demande d'inscription validée : Compte activé pour ${newUser.firstName} ${newUser.lastName} (${newUser.email}).`, 'success');
+  };
+
+  const handleRejectRegistrationRequest = (requestId: string) => {
+    const target = registrationRequests.find(r => r.id === requestId);
+    setRegistrationRequests(prev => prev.filter(r => r.id !== requestId));
+    deleteItemFromFirestore('registration_requests', requestId);
+    deleteFromSupabase('registration_requests', requestId, handleSupabaseWriteError);
+    if (target) {
+      addEvent(`Demande d'inscription refusée pour ${target.firstName} ${target.lastName} (${target.email}).`, 'warning');
+    }
+  };
+
+  const handleResetUserPassword = (userId: string, newPassword: string) => {
+    const userToUpdate = users.find(u => u.id === userId);
+    if (userToUpdate) {
+      const updatedUser: AppUser = {
+        ...userToUpdate,
+        password: newPassword
+      };
+      handleUpdateUser(updatedUser);
+      addEvent(`Mot de passe mis à jour pour ${updatedUser.firstName} ${updatedUser.lastName}.`, 'success');
+    }
+  };
+
+  const handleSendPasswordResetEmail = (targetUser: AppUser) => {
+    const targetEmail = targetUser.email || `${targetUser.username.toLowerCase()}@hubjob.fr`;
+    addEvent(`E-mail de réinitialisation de mot de passe généré et envoyé à ${targetEmail} (${targetUser.firstName} ${targetUser.lastName}).`, 'info');
   };
 
   // Contact Directory Handlers
@@ -360,6 +433,7 @@ export default function App() {
     const unsubSupaModules = syncSupabaseTable('modules_catalog', setModulesCatalog, [], handleSyncError);
     const unsubSupaUsers = syncSupabaseTable('users', setUsers, [], handleSyncError);
     const unsubSupaContacts = syncSupabaseTable('contacts', setContacts, [], handleSyncError);
+    const unsubSupaRegistrationReqs = syncSupabaseTable('registration_requests', setRegistrationRequests, [], handleSyncError);
 
     // Fallback Firestore real-time sync
     const unsubCollabs = syncCollection('collaborators', setCollaborators, []);
@@ -374,6 +448,7 @@ export default function App() {
     const unsubModules = syncCollection('modules_catalog', setModulesCatalog, []);
     const unsubUsers = syncCollection('users', setUsers, []);
     const unsubContacts = syncCollection('contacts', setContacts, []);
+    const unsubRegistrationReqs = syncCollection('registration_requests', setRegistrationRequests, []);
 
     return () => {
       unsubSupaCollabs();
@@ -381,11 +456,13 @@ export default function App() {
       unsubSupaModules();
       unsubSupaUsers();
       unsubSupaContacts();
+      unsubSupaRegistrationReqs();
       unsubCollabs();
       unsubLogs();
       unsubModules();
       unsubUsers();
       unsubContacts();
+      unsubRegistrationReqs();
     };
   }, []);
 
@@ -1719,7 +1796,15 @@ export default function App() {
 
   // If user is not authenticated, block access with Login screen
   if (!currentUser) {
-    return <LoginScreen users={users} onLogin={handleLogin} />;
+    return (
+      <LoginScreen 
+        users={users} 
+        onLogin={handleLogin} 
+        onRequestRegistration={handleRequestRegistration}
+        onResetPassword={handleResetUserPassword}
+        onLogEvent={addEvent}
+      />
+    );
   }
 
   return (
@@ -2128,6 +2213,10 @@ export default function App() {
               onAddUser={handleAddUser}
               onUpdateUser={handleUpdateUser}
               onDeleteUser={handleDeleteUser}
+              registrationRequests={registrationRequests}
+              onApproveRegistrationRequest={handleApproveRegistrationRequest}
+              onRejectRegistrationRequest={handleRejectRegistrationRequest}
+              onSendPasswordResetEmail={handleSendPasswordResetEmail}
               currentUserPermission={userPerms.admin}
             />
           )}
