@@ -447,7 +447,7 @@ export function sanitizeItemForTable(tableName: string, item: any): Record<strin
     return clean;
   }
 
-  if (tableName === 'users') {
+  if (tableName === 'users' || tableName === 'profiles') {
     const clean: Record<string, any> = {};
     clean.id = item.id;
     clean.username = strOrEmpty(item.username || item.email);
@@ -459,6 +459,11 @@ export function sanitizeItemForTable(tableName: string, item: any): Record<strin
     clean.lastName = lName;
     clean.last_name = lName;
     clean.role = strOrEmpty(item.role || 'AGENT');
+    clean.status = strOrEmpty(item.status || 'approved');
+    if (item.authId || item.auth_id) {
+      clean.authId = item.authId || item.auth_id;
+      clean.auth_id = item.authId || item.auth_id;
+    }
     clean.permissions = item.permissions || [];
     const cAt = item.createdAt || item.created_at || new Date().toISOString();
     clean.createdAt = cAt;

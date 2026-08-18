@@ -54,6 +54,7 @@ import CoverageControl from './components/CoverageControl';
 import RHFolderGenerator from './components/RHFolderGenerator';
 import EnrollmentModal from './components/EnrollmentModal';
 import LoginScreen from './components/LoginScreen';
+import PendingApprovalScreen from './components/PendingApprovalScreen';
 import AdminManagement from './components/AdminManagement';
 import ContactsDirectory from './components/ContactsDirectory';
 import { getFormattedBuildDate } from './utils/buildInfo';
@@ -247,13 +248,33 @@ export default function App() {
     addEvent(`Mise à jour de l'utilisateur ${updatedUser.firstName} ${updatedUser.lastName} (${updatedUser.username})`, 'info');
   };
 
-  const handleDeleteUser = (userId: string) => {
-    const userToDelete = users.find(u => u.id === userId);
+  const handleDeleteUser = async (userId: string) => {
+    const userToDelete = users.find(u => u.id === userId || (u.email && u.email.toLowerCase() === userId.toLowerCase()));
+    const targetEmail = userToDelete?.email || userToDelete?.username;
+
+    setUsers(prev => prev.filter(u => u.id !== userId && (!targetEmail || (u.email?.toLowerCase() !== targetEmail.toLowerCase() && u.username?.toLowerCase() !== targetEmail.toLowerCase()))));
+    
+    // Also remove from registration requests if present
+    setRegistrationRequests(prev => prev.filter(r => r.id !== userId && (!targetEmail || r.email?.toLowerCase() !== targetEmail.toLowerCase())));
+
+    deleteItemFromFirestore('users', userId);
+    deleteItemFromFirestore('registration_requests', userId);
+    deleteFromSupabase('users', userId, () => {});
+    deleteFromSupabase('profiles', userId, () => {});
+    deleteFromSupabase('registration_requests', userId, () => {});
+
+    try {
+      await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, email: targetEmail })
+      });
+    } catch (err) {
+      console.warn('Backend delete API call notice:', err);
+    }
+
     if (userToDelete) {
-      setUsers(prev => prev.filter(u => u.id !== userId));
-      deleteItemFromFirestore('users', userId);
-      deleteFromSupabase('users', userId, handleSupabaseWriteError);
-      addEvent(`Utilisateur supprimé : ${userToDelete.firstName} ${userToDelete.lastName} (${userToDelete.username})`, 'warning');
+      addEvent(`Utilisateur supprimé : ${userToDelete.firstName} ${userToDelete.lastName} (${targetEmail || userToDelete.username})`, 'warning');
     }
   };
 
@@ -1813,6 +1834,69 @@ export default function App() {
     );
   }
 
+  // Refresh status callback for pending users
+  const handleRefreshUserStatus = async () => {
+    if (!currentUser) return;
+    try {
+      // 1. Check local users state first
+      const cleanEmail = (currentUser.email || currentUser.username).toLowerCase();
+      const localMatch = users.find(u => 
+        u.id === currentUser.id || 
+        (u.email && u.email.toLowerCase() === cleanEmail) || 
+        u.username.toLowerCase() === cleanEmail
+      );
+      if (localMatch && localMatch.status === 'approved') {
+        const approvedUser: AppUser = {
+          ...localMatch,
+          permissions: normalizeUserPermissions(localMatch.permissions)
+        };
+        setCurrentUser(approvedUser);
+        localStorage.setItem('alyzia_current_user_id', approvedUser.id);
+        return;
+      }
+
+      // 2. Direct Supabase query to get latest profile status
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`id.eq.${currentUser.id},email.eq.${cleanEmail}`)
+        .maybeSingle();
+
+      if (!error && data && data.status === 'approved') {
+        const updatedUser: AppUser = {
+          id: data.id || currentUser.id,
+          lastName: data.last_name || data.lastName || currentUser.lastName,
+          firstName: data.first_name || data.firstName || currentUser.firstName,
+          email: data.email || currentUser.email,
+          role: data.role || currentUser.role,
+          username: data.email || currentUser.username,
+          status: 'approved',
+          permissions: normalizeUserPermissions(data.permissions),
+          createdAt: data.created_at || data.createdAt || currentUser.createdAt || new Date().toISOString()
+        };
+        setCurrentUser(updatedUser);
+        setUsers(prev => {
+          const exists = prev.some(u => u.id === updatedUser.id);
+          return exists ? prev.map(u => u.id === updatedUser.id ? updatedUser : u) : [updatedUser, ...prev];
+        });
+        localStorage.setItem('alyzia_current_user_id', updatedUser.id);
+      }
+    } catch (err) {
+      console.warn('Status refresh notice:', err);
+    }
+  };
+
+  // If user account is pending administrator validation, block access with Pending Approval screen
+  if (currentUser.status === 'pending') {
+    return (
+      <PendingApprovalScreen
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onRefreshStatus={handleRefreshUserStatus}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 font-sans flex flex-col antialiased text-slate-800">
       
@@ -2073,6 +2157,10 @@ export default function App() {
               }}
               collaboratorsCount={collaborators.length}
               trainingLogsCount={trainingLogs.length}
+              pendingRequestsCount={
+                users.filter(u => u.status === 'pending').length +
+                registrationRequests.filter(r => r.status === 'pending' && !users.some(u => (u.email || u.username).toLowerCase() === r.email.toLowerCase())).length
+              }
             />
           )}
 

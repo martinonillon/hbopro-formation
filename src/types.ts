@@ -108,6 +108,8 @@ export interface AppUser {
   lastName: string;
   firstName: string;
   role: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  authId?: string;
   permissions: UserAppPermissions;
   createdAt: string;
 }

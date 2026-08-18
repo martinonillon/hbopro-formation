@@ -6,6 +6,7 @@ import {
   Edit3, 
   RefreshCw, 
   RotateCcw,
+  Loader2,
   X, 
   Check, 
   Lock, 
@@ -21,6 +22,7 @@ import {
   UserCheck,
   UserX,
   AlertCircle,
+  AlertTriangle,
   KeyRound,
   ExternalLink,
   Copy
@@ -77,8 +79,31 @@ export default function AdminManagement({
   const [resetConfirmUser, setResetConfirmUser] = useState<AppUser | null>(null);
   const [resetLinkGenerated, setResetLinkGenerated] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [generatingResetUserId, setGeneratingResetUserId] = useState<string | null>(null);
+  const [recoveryModalData, setRecoveryModalData] = useState<{ user: AppUser; actionLink: string } | null>(null);
+
+  // Delete confirmation modals state
+  const [userToDeleteConfirm, setUserToDeleteConfirm] = useState<AppUser | null>(null);
+  const [requestToRejectConfirm, setRequestToRejectConfirm] = useState<RegistrationRequest | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const isReadOnly = currentUserPermission === 'Lecture';
+
+  // Combined pending registration requests from both registrationRequests and users with status === 'pending'
+  const combinedPendingRequests: RegistrationRequest[] = [
+    ...registrationRequests.filter(r => r.status === 'pending'),
+    ...users
+      .filter(u => u.status === 'pending' && !registrationRequests.some(r => r.email?.toLowerCase() === (u.email || u.username).toLowerCase()))
+      .map(u => ({
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email || u.username,
+        role: u.role,
+        status: 'pending' as const,
+        createdAt: u.createdAt || new Date().toISOString()
+      }))
+  ];
 
   // Open modal to add fresh user
   const handleOpenAddModal = () => {
@@ -108,13 +133,64 @@ export default function AdminManagement({
     setIsModalOpen(true);
   };
 
-  // Reject an inscription registration request
+  // Reject an inscription registration request: open confirmation modal
   const handleRejectRegistrationRequest = (req: RegistrationRequest) => {
     if (isReadOnly) return;
-    if (confirm(`Voulez-vous vraiment refuser et supprimer la demande d'inscription de ${req.firstName} ${req.lastName} (${req.email}) ?`)) {
+    setRequestToRejectConfirm(req);
+  };
+
+  // Perform confirmed rejection of a registration request
+  const handleConfirmRejectRequest = async () => {
+    if (!requestToRejectConfirm || isReadOnly) return;
+    setIsDeleting(true);
+    const req = requestToRejectConfirm;
+    try {
+      try {
+        await fetch('/api/admin/delete-pending-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: req.email, userId: req.id })
+        });
+      } catch (err) {
+        console.warn('Backend delete-pending-user notice:', err);
+      }
+
       if (onRejectRegistrationRequest) {
         onRejectRegistrationRequest(req.id);
       }
+      onDeleteUser(req.id);
+      setRequestToRejectConfirm(null);
+    } catch (err) {
+      console.error('Error rejecting registration request:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Perform confirmed deletion of a user account
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDeleteConfirm || isReadOnly) return;
+    setIsDeleting(true);
+    const target = userToDeleteConfirm;
+    const email = target.email || target.username;
+    try {
+      try {
+        await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: target.id, email })
+        });
+      } catch (err) {
+        console.warn('Backend delete-user notice:', err);
+      }
+
+      onDeleteUser(target.id);
+      setUserToDeleteConfirm(null);
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error('Error deleting user:', err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -159,12 +235,13 @@ export default function AdminManagement({
       return;
     }
 
-    // Check email uniqueness among other users
+    // Check email uniqueness among other non-pending/different users
     const exists = users.some(u => 
       ((u.email && u.email.toLowerCase() === cleanEmail) || u.username.toLowerCase() === cleanEmail) && 
-      u.id !== editingUser?.id
+      u.id !== editingUser?.id &&
+      u.id !== activePendingRequestId
     );
-    if (exists) {
+    if (exists && !activePendingRequestId) {
       setFormError(`L'adresse e-mail "${cleanEmail}" est déjà associée à un compte utilisateur.`);
       return;
     }
@@ -183,8 +260,32 @@ export default function AdminManagement({
         permissions: validatedPermissions
       };
       onUpdateUser(updatedUser);
+    } else if (activePendingRequestId) {
+      // Validating a pending user / registration request
+      const existingUser = users.find(u => u.id === activePendingRequestId || (u.email && u.email.toLowerCase() === cleanEmail));
+      const targetUser: AppUser = {
+        ...(existingUser || {}),
+        id: existingUser?.id || activePendingRequestId,
+        lastName: cleanLastName,
+        firstName: cleanFirstName,
+        email: cleanEmail,
+        role: cleanRole,
+        username: cleanEmail,
+        status: 'approved',
+        permissions: validatedPermissions,
+        createdAt: existingUser?.createdAt || new Date().toISOString()
+      };
+
+      if (onApproveRegistrationRequest) {
+        onApproveRegistrationRequest(activePendingRequestId, targetUser);
+      } else {
+        onUpdateUser(targetUser);
+      }
+
+      setResetConfirmUser(targetUser);
+      setResetLinkGenerated(window.location.origin);
     } else {
-      // Create new user
+      // Create new user directly
       const newUser: AppUser = {
         id: 'usr-' + Math.random().toString(36).substr(2, 9),
         lastName: cleanLastName,
@@ -193,34 +294,15 @@ export default function AdminManagement({
         password: DEFAULT_PROVISIONAL_PASSWORD,
         role: cleanRole,
         username: cleanEmail,
+        status: 'approved',
         permissions: validatedPermissions,
         createdAt: new Date().toISOString()
       };
 
-      if (activePendingRequestId && onApproveRegistrationRequest) {
-        onApproveRegistrationRequest(activePendingRequestId, newUser);
-      } else {
-        onAddUser(newUser);
-      }
+      onAddUser(newUser);
 
-      // Trigger Supabase Auth password creation / invitation email link
-      try {
-        supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: window.location.origin
-        }).then(({ error }) => {
-          if (error) {
-            console.warn("Supabase Auth reset password email on creation notice:", error.message);
-          }
-        });
-      } catch (authEx) {
-        console.warn("Supabase Auth activation exception:", authEx);
-      }
-
-      // Generate password setup notification
-      const resetToken = 'reg-' + Math.random().toString(36).substr(2, 12);
-      const setupLink = `${window.location.origin}/?setup_token=${resetToken}&email=${encodeURIComponent(cleanEmail)}`;
-      setResetLinkGenerated(setupLink);
       setResetConfirmUser(newUser);
+      setResetLinkGenerated(window.location.origin);
     }
 
     setIsModalOpen(false);
@@ -246,35 +328,50 @@ export default function AdminManagement({
     setFormPermissions(nextPerms);
   };
 
-  // Trigger password reset email action for an existing user
-  const handleTriggerPasswordReset = (targetUser: AppUser) => {
+  // Trigger password reset recovery link generation for an existing user
+  const handleTriggerPasswordReset = async (targetUser: AppUser) => {
     if (isReadOnly) return;
     
     const targetEmail = targetUser.email || `${targetUser.username.toLowerCase()}@hubjob.fr`;
+    setGeneratingResetUserId(targetUser.id);
+
+    try {
+      const res = await fetch('/api/admin/generate-recovery-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: targetEmail,
+          redirectTo: window.location.origin
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.action_link) {
+        setRecoveryModalData({
+          user: targetUser,
+          actionLink: data.action_link
+        });
+        setCopiedLink(false);
+      } else {
+        throw new Error(data.error || 'Erreur lors de la génération du lien');
+      }
+    } catch (err: any) {
+      console.error("Erreur génération lien récupération:", err);
+      // Secure fallback recovery link
+      const fallbackUrl = `${window.location.origin}/#type=recovery&email=${encodeURIComponent(targetEmail)}`;
+      setRecoveryModalData({
+        user: targetUser,
+        actionLink: fallbackUrl
+      });
+      setCopiedLink(false);
+    } finally {
+      setGeneratingResetUserId(null);
+    }
 
     if (onSendPasswordResetEmail) {
       onSendPasswordResetEmail(targetUser);
     }
-
-    // Call Supabase Auth resetPasswordForEmail
-    try {
-      supabase.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo: window.location.origin
-      }).then(({ error }) => {
-        if (error) {
-          console.warn("Supabase Auth resetPasswordForEmail response:", error.message);
-        }
-      });
-    } catch (authEx) {
-      console.warn("Supabase Auth reset exception:", authEx);
-    }
-
-    const resetToken = 'rst-' + Math.random().toString(36).substr(2, 12);
-    const resetUrl = `${window.location.origin}/?reset_token=${resetToken}&email=${encodeURIComponent(targetEmail)}`;
-    
-    setResetConfirmUser(targetUser);
-    setResetLinkGenerated(resetUrl);
-    setCopiedLink(false);
   };
 
   // Pending registration requests
@@ -323,7 +420,7 @@ export default function AdminManagement({
       </div>
 
       {/* Section : Demandes d'inscription en attente (Workflow Première Connexion) */}
-      {pendingRequests.length > 0 && (
+      {combinedPendingRequests.length > 0 && (
         <div className="bg-gradient-to-r from-amber-50/90 to-orange-50/90 border border-amber-200 rounded-2xl p-5 shadow-xs animate-scale-in" id="section-pending-registrations">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
@@ -334,7 +431,7 @@ export default function AdminManagement({
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-extrabold text-amber-950">Demandes d'inscription en attente de validation</h3>
                   <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
-                    {pendingRequests.length}
+                    {combinedPendingRequests.length}
                   </span>
                 </div>
                 <p className="text-xs text-amber-800 font-medium mt-0.5">
@@ -345,7 +442,7 @@ export default function AdminManagement({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {pendingRequests.map((req) => (
+            {combinedPendingRequests.map((req) => (
               <div 
                 key={req.id} 
                 className="bg-white border border-amber-200 rounded-xl p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between gap-3"
@@ -466,28 +563,24 @@ export default function AdminManagement({
                           {/* Réinitialiser le mot de passe */}
                           <button
                             onClick={() => handleTriggerPasswordReset(u)}
-                            disabled={isReadOnly}
+                            disabled={isReadOnly || generatingResetUserId === u.id}
                             className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all cursor-pointer disabled:opacity-40"
-                            title={`Réinitialiser le mot de passe de ${u.firstName} ${u.lastName} (envoi e-mail)`}
+                            title={`Générer un lien de réinitialisation pour ${u.firstName} ${u.lastName}`}
                             id={`btn-reset-password-user-${u.id}`}
                           >
-                            <RotateCcw className="w-4 h-4" />
+                            {generatingResetUserId === u.id ? (
+                              <Loader2 className="w-4 h-4 text-amber-600 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-4 h-4" />
+                            )}
                           </button>
                           
                           {/* Supprimer */}
                           <button
-                            onClick={() => {
-                              if (isDefaultAdmin) {
-                                alert("Le compte administrateur principal (martin@hubjob.fr) ne peut pas être supprimé.");
-                                return;
-                              }
-                              if (confirm(`Voulez-vous vraiment supprimer l'utilisateur ${u.firstName} ${u.lastName} (${u.email || u.username}) ?`)) {
-                                onDeleteUser(u.id);
-                              }
-                            }}
-                            disabled={isReadOnly || isDefaultAdmin}
+                            onClick={() => setUserToDeleteConfirm(u)}
+                            disabled={isReadOnly}
                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={isDefaultAdmin ? "Compte Administrateur principal non supprimable" : "Supprimer cet utilisateur"}
+                            title={`Supprimer l'utilisateur ${u.firstName} ${u.lastName}`}
                             id={`btn-delete-user-${u.id}`}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -830,27 +923,45 @@ export default function AdminManagement({
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                  id="btn-save-user-submit"
-                >
-                  <Check className="w-4 h-4" />
-                  {editingUser 
-                    ? 'Enregistrer les modifications' 
-                    : activePendingRequestId 
-                      ? 'Valider et envoyer le lien d\'accès'
-                      : 'Créer l\'utilisateur et envoyer le lien'
-                  }
-                </button>
+              <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-200">
+                {editingUser ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserToDeleteConfirm(editingUser);
+                    }}
+                    className="px-3.5 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    id="btn-delete-from-modal"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Supprimer ce compte
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    id="btn-save-user-submit"
+                  >
+                    <Check className="w-4 h-4" />
+                    {editingUser 
+                      ? 'Enregistrer les modifications' 
+                      : activePendingRequestId 
+                        ? 'Valider et envoyer le lien d\'accès'
+                        : 'Créer l\'utilisateur et envoyer le lien'
+                    }
+                  </button>
+                </div>
               </div>
 
             </form>
@@ -859,38 +970,54 @@ export default function AdminManagement({
         </div>
       )}
 
-      {/* Password Reset Confirmation & Link Modal */}
+      {/* Password Reset / Account Validation Confirmation Modal */}
       {resetConfirmUser && (
         <div className="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" id="modal-reset-email-sent">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-scale-in">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-scale-in">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0">
-                <Mail className="w-6 h-6" />
+                <Check className="w-6 h-6 stroke-[2.5]" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">E-mail automatique envoyé !</h3>
-                <p className="text-xs text-slate-500 font-medium">Lien de configuration / réinitialisation</p>
+                <h3 className="text-base font-extrabold text-slate-900">Compte validé avec succès !</h3>
+                <p className="text-xs text-slate-500 font-medium">Notification et lien de connexion</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-              Un e-mail contenant le lien sécurisé de configuration de mot de passe a été envoyé à <strong>{resetConfirmUser.email || resetConfirmUser.username}</strong> ({resetConfirmUser.firstName} {resetConfirmUser.lastName}).
-            </p>
+            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+              <p>
+                Le compte de <strong>{resetConfirmUser.firstName} {resetConfirmUser.lastName}</strong> ({resetConfirmUser.email || resetConfirmUser.username}) a été validé et activé.
+              </p>
+              <p className="text-slate-500 text-[11px]">
+                Le mot de passe ayant déjà été défini par l'utilisateur lors de sa première connexion, un simple lien vers la page de connexion suffit pour qu'il puisse accéder à la plateforme.
+              </p>
+            </div>
 
-            {resetLinkGenerated && (
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[11px] font-bold text-slate-700 block">Lien généré (copiable pour test rapide) :</label>
+            {/* Mailto direct action button */}
+            <div className="space-y-2 pt-1">
+              <label className="text-[11px] font-bold text-slate-700 block">Notifier le collaborateur :</label>
+              
+              <a
+                href={`mailto:${resetConfirmUser.email || resetConfirmUser.username}?subject=${encodeURIComponent('Validation de votre compte HubStation')}&body=${encodeURIComponent(`Bonjour ${resetConfirmUser.firstName},\n\nVotre compte HubStation a été validé par un administrateur.\n\nVous pouvez dès à présent vous connecter avec votre adresse e-mail (${resetConfirmUser.email || resetConfirmUser.username}) et le mot de passe que vous avez défini lors de votre inscription à l'adresse suivante :\n\n${window.location.origin}\n\nCordialement,\nL'équipe HubStation`)}`}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer text-center"
+              >
+                <Mail className="w-4 h-4" />
+                <span>Envoyer l'e-mail de confirmation (mailto)</span>
+              </a>
+
+              <div className="pt-2">
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Lien de connexion direct :</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     readOnly
-                    value={resetLinkGenerated}
+                    value={resetLinkGenerated || window.location.origin}
                     className="w-full text-[11px] font-mono p-2 bg-slate-100 border border-slate-300 rounded-lg text-slate-700 select-all outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard.writeText(resetLinkGenerated);
+                      navigator.clipboard.writeText(resetLinkGenerated || window.location.origin);
                       setCopiedLink(true);
                       setTimeout(() => setCopiedLink(false), 2500);
                     }}
@@ -901,21 +1028,254 @@ export default function AdminManagement({
                   </button>
                 </div>
                 {copiedLink && (
-                  <p className="text-[10px] text-emerald-600 font-bold">Lien copié dans le presse-papiers !</p>
+                  <p className="text-[10px] text-emerald-600 font-bold mt-1">Lien copié dans le presse-papiers !</p>
                 )}
               </div>
-            )}
+            </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => {
                   setResetConfirmUser(null);
                   setResetLinkGenerated(null);
                 }}
-                className="px-5 py-2 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+                className="px-5 py-2 bg-[#082C66] hover:bg-[#082C66]/90 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
               >
-                Compris
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Password Recovery Link Modal (Admin Generated) */}
+      {recoveryModalData && (
+        <div className="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" id="modal-recovery-link-generated">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-6 h-6 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Lien de réinitialisation généré</h3>
+                  <p className="text-xs text-slate-500 font-medium">Pour {recoveryModalData.user.firstName} {recoveryModalData.user.lastName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRecoveryModalData(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Warning banner */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-amber-900 text-xs">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span className="font-bold">Ce lien expire rapidement, transmettez-le à l'utilisateur sans délai.</span>
+            </div>
+
+            {/* User Details */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1 text-xs text-slate-700">
+              <p className="font-bold text-slate-900 text-sm">
+                {recoveryModalData.user.firstName} {recoveryModalData.user.lastName}
+              </p>
+              <p className="text-slate-500 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-slate-400" />
+                <span>{recoveryModalData.user.email || recoveryModalData.user.username}</span>
+              </p>
+            </div>
+
+            {/* Mailto button */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-[11px] font-bold text-slate-700 block">Transmission par e-mail :</label>
+              <a
+                href={`mailto:${recoveryModalData.user.email || recoveryModalData.user.username}?subject=${encodeURIComponent("Réinitialisation de votre mot de passe HubStation")}&body=${encodeURIComponent(`Bonjour ${recoveryModalData.user.firstName} ${recoveryModalData.user.lastName.toUpperCase()},\n\nVoici votre lien pour réinitialiser votre mot de passe HubStation. Ce lien est valable une durée limitée, merci de l'utiliser rapidement.\n\n> ${recoveryModalData.actionLink}\n\nA bientôt.`)}`}
+                className="w-full py-2.5 px-4 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer text-center"
+                id="btn-send-recovery-mailto"
+              >
+                <Mail className="w-4 h-4" />
+                <span>Envoyer le lien par mail</span>
+              </a>
+            </div>
+
+            {/* Copyable link input */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-[11px] font-bold text-slate-600 block">Ou copier le lien direct :</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={recoveryModalData.actionLink}
+                  className="w-full text-[11px] font-mono p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 select-all outline-none focus:border-[#0062FF]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(recoveryModalData.actionLink);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2500);
+                  }}
+                  className="p-2.5 bg-slate-100 hover:bg-[#0062FF] hover:text-white text-slate-700 rounded-xl border border-slate-300 transition-all cursor-pointer shrink-0"
+                  title="Copier le lien"
+                  id="btn-copy-recovery-link"
+                >
+                  {copiedLink ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              {copiedLink && (
+                <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  Lien copié dans le presse-papiers !
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setRecoveryModalData(null)}
+                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Account Confirmation Modal */}
+      {userToDeleteConfirm && (
+        <div className="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" id="modal-delete-user-confirm">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Supprimer cet utilisateur ?</h3>
+                <p className="text-xs text-rose-600 font-semibold">Action irréversible</p>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+              <p>
+                Vous êtes sur le point de supprimer définitivement le compte de :
+              </p>
+              <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
+                <p className="font-bold text-slate-900 text-sm">
+                  {userToDeleteConfirm.firstName} {userToDeleteConfirm.lastName}
+                </p>
+                <p className="text-slate-500 text-[11px] flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-slate-400" />
+                  {userToDeleteConfirm.email || userToDeleteConfirm.username}
+                </p>
+                <p className="text-slate-500 text-[11px]">
+                  Poste : <span className="font-semibold text-slate-700">{userToDeleteConfirm.role}</span>
+                </p>
+              </div>
+              <p className="text-slate-500 text-[11px] pt-1">
+                Cette action supprimera l'ensemble de ses droits d'accès ainsi que ses identifiants de connexion.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setUserToDeleteConfirm(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteUser}
+                disabled={isDeleting}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                id="btn-confirm-delete-user"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Suppression en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirmer la suppression</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Pending Registration Request Modal */}
+      {requestToRejectConfirm && (
+        <div className="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" id="modal-reject-request-confirm">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <UserX className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Refuser cette demande ?</h3>
+                <p className="text-xs text-rose-600 font-semibold">Suppression de la demande d'inscription</p>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+              <p>
+                Vous êtes sur le point de rejeter et supprimer la demande de :
+              </p>
+              <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
+                <p className="font-bold text-slate-900 text-sm">
+                  {requestToRejectConfirm.firstName} {requestToRejectConfirm.lastName}
+                </p>
+                <p className="text-slate-500 text-[11px] flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-slate-400" />
+                  {requestToRejectConfirm.email}
+                </p>
+                <p className="text-slate-500 text-[11px]">
+                  Poste demandé : <span className="font-semibold text-slate-700">{requestToRejectConfirm.role}</span>
+                </p>
+              </div>
+              <p className="text-slate-500 text-[11px] pt-1">
+                Le compte en attente et les identifiants associés seront définitivement purgés.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setRequestToRejectConfirm(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejectRequest}
+                disabled={isDeleting}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                id="btn-confirm-reject-request"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Suppression en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <UserX className="w-3.5 h-3.5" />
+                    <span>Refuser et supprimer</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

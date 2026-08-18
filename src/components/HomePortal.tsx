@@ -9,7 +9,8 @@ import {
   Shield, 
   ArrowRight, 
   Eye, 
-  AlertCircle
+  AlertCircle,
+  Bell
 } from 'lucide-react';
 import { AppUser } from '../types';
 import { normalizeUserPermissions } from '../data/usersData';
@@ -20,11 +21,13 @@ interface HomePortalProps {
   collaboratorsCount?: number;
   trainingLogsCount?: number;
   activeSessionsCount?: number;
+  pendingRequestsCount?: number;
 }
 
 export default function HomePortal({
   currentUser,
-  onSelectApp
+  onSelectApp,
+  pendingRequestsCount = 0
 }: HomePortalProps) {
   const [infoModal, setInfoModal] = useState<{ title: string; desc: string } | null>(null);
 
@@ -411,20 +414,36 @@ export default function HomePortal({
 
             <div className="relative z-10">
               <div className="flex items-start justify-between mb-5">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md text-white border border-white/25 flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-sm relative">
                   <Shield className="w-8 h-8" />
+                  {permAdmin === 'Écriture' && pendingRequestsCount > 0 && (
+                    <span 
+                      className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-rose-500 text-white font-black text-xs flex items-center justify-center border-2 border-white shadow-md animate-pulse"
+                      title={`${pendingRequestsCount} demande(s) en attente de validation`}
+                    >
+                      {pendingRequestsCount > 9 ? '9+' : pendingRequestsCount}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5">
+                  {permAdmin === 'Écriture' && pendingRequestsCount > 0 && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white border border-rose-400 shadow-md animate-pulse">
+                      <Bell className="w-3.5 h-3.5 fill-current" />
+                      <span>{pendingRequestsCount} en attente</span>
+                    </span>
+                  )}
                   {permAdmin === 'Lecture' ? (
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-black/25 text-white border border-white/30 backdrop-blur-xs">
                       <Eye className="w-3 h-3 text-amber-300" />
                       Lecture seule
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/25 text-white border border-white/35 backdrop-blur-xs shadow-xs">
-                      <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-                      En ligne
-                    </span>
+                    !(permAdmin === 'Écriture' && pendingRequestsCount > 0) && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-white/25 text-white border border-white/35 backdrop-blur-xs shadow-xs">
+                        <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
+                        En ligne
+                      </span>
+                    )
                   )}
                 </div>
               </div>

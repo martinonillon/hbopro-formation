@@ -57,15 +57,15 @@ export default function LoginScreen({
   const [regFirstName, setRegFirstName] = useState('');
   const [regRole, setRegRole] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
   const [regSubmitted, setRegSubmitted] = useState(false);
   const [regError, setRegError] = useState('');
   const [isRegLoading, setIsRegLoading] = useState(false);
 
-  // Forgot Password Form State
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotSubmitted, setForgotSubmitted] = useState(false);
-  const [forgotError, setForgotError] = useState('');
-  const [isForgotLoading, setIsForgotLoading] = useState(false);
+  const regPasswordRules = validatePassword(regPassword);
 
   // Reset Password Form State (Setting new password with 12-char rule)
   const [newPassword, setNewPassword] = useState('');
@@ -74,27 +74,58 @@ export default function LoginScreen({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resetPasswordError, setResetPasswordError] = useState('');
   const [isResetLoading, setIsResetLoading] = useState(false);
+  const [recoverySessionStatus, setRecoverySessionStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
 
   const passwordRules = validatePassword(newPassword);
 
-  // Supabase Auth: Listen for password recovery links (e.g. redirected from email)
+  // Supabase Auth: Listen for password recovery links (e.g. redirected from email recovery link)
   useEffect(() => {
     // Check URL parameters & hash for recovery token
     const hash = window.location.hash || '';
     const search = window.location.search || '';
-    if (
+    const hasRecoveryParams = 
       hash.includes('type=recovery') || 
       hash.includes('access_token=') || 
       search.includes('type=recovery') ||
       search.includes('reset_token') ||
-      search.includes('setup_token')
-    ) {
+      search.includes('token=');
+
+    let timeoutId: NodeJS.Timeout;
+
+    if (hasRecoveryParams) {
       setIsResetModalOpen(true);
+      setRecoverySessionStatus('checking');
+
+      // Set timeout fallback: if no valid recovery session is confirmed after 3.5s, mark as invalid/expired
+      timeoutId = setTimeout(async () => {
+        try {
+          const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+          if (sessionErr) {
+            console.error("Session check error on password recovery:", sessionErr);
+          }
+          if (sessionData?.session) {
+            setRecoverySessionStatus('valid');
+            if (sessionData.session.user?.email) {
+              const userEmail = sessionData.session.user.email.toLowerCase();
+              const found = users.find(u => (u.email && u.email.toLowerCase() === userEmail) || u.username.toLowerCase() === userEmail);
+              if (found) setResetTargetUser(found);
+            }
+          } else {
+            console.warn("No active session established from recovery token within timeout.");
+            setRecoverySessionStatus('invalid');
+          }
+        } catch (e) {
+          console.error("Recovery session evaluation error:", e);
+          setRecoverySessionStatus('invalid');
+        }
+      }, 3500);
     }
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
+        if (timeoutId) clearTimeout(timeoutId);
         setIsResetModalOpen(true);
+        setRecoverySessionStatus('valid');
         if (session?.user?.email) {
           const userEmail = session.user.email.toLowerCase();
           const found = users.find(u => (u.email && u.email.toLowerCase() === userEmail) || u.username.toLowerCase() === userEmail);
@@ -102,10 +133,20 @@ export default function LoginScreen({
             setResetTargetUser(found);
           }
         }
+      } else if (hasRecoveryParams && session?.user) {
+        if (timeoutId) clearTimeout(timeoutId);
+        setIsResetModalOpen(true);
+        setRecoverySessionStatus('valid');
+        if (session.user.email) {
+          const userEmail = session.user.email.toLowerCase();
+          const found = users.find(u => (u.email && u.email.toLowerCase() === userEmail) || u.username.toLowerCase() === userEmail);
+          if (found) setResetTargetUser(found);
+        }
       }
     });
 
     return () => {
+      if (timeoutId) clearTimeout(timeoutId);
       authListener?.subscription?.unsubscribe();
     };
   }, [users]);
@@ -154,13 +195,16 @@ export default function LoginScreen({
           u.id === supabaseUser.id
         );
 
-        const resolvedUser: AppUser = matchedUser || {
+        const userStatus = matchedUser?.status || (supabaseUser.user_metadata?.status as any) || 'approved';
+
+        const resolvedUser: AppUser = matchedUser ? { ...matchedUser, status: userStatus } : {
           id: supabaseUser.id || 'usr-' + Date.now(),
           username: supabaseUser.email || cleanIdentifier,
           email: supabaseUser.email || cleanIdentifier,
           firstName: supabaseUser.user_metadata?.first_name || supabaseUser.user_metadata?.firstName || 'Utilisateur',
           lastName: supabaseUser.user_metadata?.last_name || supabaseUser.user_metadata?.lastName || '',
           role: supabaseUser.user_metadata?.role || 'Collaborateur',
+          status: userStatus,
           permissions: { ...DEFAULT_READONLY_PERMISSIONS },
           createdAt: new Date().toISOString()
         };
@@ -195,7 +239,7 @@ export default function LoginScreen({
     }
   };
 
-  // Handle First Login registration request
+  // Handle First Login registration request with direct account creation & password validation
   const handleFirstLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
@@ -205,8 +249,8 @@ export default function LoginScreen({
     const cleanPoste = regRole.trim();
     const cleanMail = regEmail.trim().toLowerCase();
 
-    if (!cleanNom || !cleanPrenom || !cleanPoste || !cleanMail) {
-      setRegError('Tous les champs sont obligatoires.');
+    if (!cleanNom || !cleanPrenom || !cleanPoste || !cleanMail || !regPassword || !regConfirmPassword) {
+      setRegError('Tous les champs sont obligatoires (Nom, Prénom, Poste, E-mail et Mots de passe).');
       return;
     }
 
@@ -216,9 +260,84 @@ export default function LoginScreen({
       return;
     }
 
+    if (!regPasswordRules.isValid) {
+      setRegError('Le mot de passe ne respecte pas les critères de sécurité requis (12 caractères minimum, 1 majuscule, 1 minuscule, 1 chiffre et 1 caractère spécial).');
+      return;
+    }
+
+    if (regPassword !== regConfirmPassword) {
+      setRegError('Les deux mots de passe saisis ne sont pas identiques.');
+      return;
+    }
+
+    // Check if email already exists among registered or pending users
+    const emailExists = users.some(u => 
+      (u.email && u.email.toLowerCase() === cleanMail) || 
+      u.username.toLowerCase() === cleanMail
+    );
+    if (emailExists) {
+      setRegError('Cette adresse e-mail est déjà associée à un compte ou à une demande en cours.');
+      return;
+    }
+
     setIsRegLoading(true);
 
     try {
+      let supaUserId: string | undefined = undefined;
+
+      // 1. Direct account creation in Supabase Auth
+      try {
+        const { data: supaSignUpData, error: supaSignUpErr } = await supabase.auth.signUp({
+          email: cleanMail,
+          password: regPassword,
+          options: {
+            data: {
+              first_name: cleanPrenom,
+              last_name: cleanNom,
+              role: cleanPoste,
+              status: 'pending'
+            }
+          }
+        });
+
+        if (supaSignUpErr) {
+          const lowerErr = supaSignUpErr.message.toLowerCase();
+          if (
+            lowerErr.includes('already registered') || 
+            lowerErr.includes('already in use') || 
+            lowerErr.includes('user_already_exists') ||
+            lowerErr.includes('already exists')
+          ) {
+            setIsRegLoading(false);
+            setRegError('Cette adresse e-mail est déjà associée à un compte ou à une demande en cours.');
+            return;
+          }
+          console.warn("Supabase Auth signUp notice:", supaSignUpErr.message);
+        } else if (supaSignUpData?.user?.id) {
+          supaUserId = supaSignUpData.user.id;
+        }
+      } catch (authEx: any) {
+        console.warn("Supabase Auth signUp exception:", authEx);
+      }
+
+      const generatedId = supaUserId || ('usr-' + Math.random().toString(36).substring(2, 10));
+
+      // 2. Parallel profile insertion with status = 'pending'
+      try {
+        await supabase.from('profiles').insert([{
+          id: generatedId,
+          email: cleanMail,
+          first_name: cleanPrenom,
+          last_name: cleanNom,
+          role: cleanPoste,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        }]);
+      } catch (profEx) {
+        console.warn("Profiles insert notice:", profEx);
+      }
+
+      // 3. Register request in local state and Firestore/Supabase tables
       if (onRequestRegistration) {
         await onRequestRegistration({
           lastName: cleanNom,
@@ -229,7 +348,7 @@ export default function LoginScreen({
       }
 
       if (onLogEvent) {
-        onLogEvent(`Nouvelle demande d'inscription reçue de ${cleanPrenom} ${cleanNom} (${cleanMail}) pour le poste ${cleanPoste}. Notification transmise à martin@hubjob.fr.`, 'info');
+        onLogEvent(`Nouvelle demande d'inscription reçue de ${cleanPrenom} ${cleanNom} (${cleanMail}) pour le poste ${cleanPoste}. Compte créé avec statut 'En attente'.`, 'info');
       }
 
       setIsRegLoading(false);
@@ -238,59 +357,6 @@ export default function LoginScreen({
       setIsRegLoading(false);
       console.error("Erreur enregistrement demande:", err);
       setRegSubmitted(true);
-    }
-  };
-
-  // Handle Forgot Password link request via Supabase Auth
-  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setForgotError('');
-
-    const cleanMail = forgotEmail.trim().toLowerCase();
-    if (!cleanMail) {
-      setForgotError('Veuillez saisir votre adresse e-mail.');
-      return;
-    }
-
-    setIsForgotLoading(true);
-
-    try {
-      // Call Supabase Auth resetPasswordForEmail
-      try {
-        const { error } = await supabase.auth.resetPasswordForEmail(cleanMail, {
-          redirectTo: window.location.origin
-        });
-        if (error) {
-          console.warn("Supabase auth resetPasswordForEmail info:", error.message);
-        }
-      } catch (authEx) {
-        console.warn("Supabase Auth reset exception:", authEx);
-      }
-
-      const effectiveUsers = users.length > 0 ? users : [DEFAULT_ADMIN_USER];
-      const targetUser = effectiveUsers.find(u => 
-        (u.email && u.email.toLowerCase() === cleanMail) || 
-        u.username.toLowerCase() === cleanMail
-      );
-
-      if (targetUser) {
-        setResetTargetUser(targetUser);
-        if (onLogEvent) {
-          onLogEvent(`E-mail de réinitialisation de mot de passe envoyé à ${cleanMail} (${targetUser.firstName} ${targetUser.lastName}) via Supabase Auth.`, 'info');
-        }
-      } else {
-        setResetTargetUser(null);
-        if (onLogEvent) {
-          onLogEvent(`Demande de réinitialisation pour l'adresse ${cleanMail} traitée.`, 'info');
-        }
-      }
-
-      setIsForgotLoading(false);
-      setForgotSubmitted(true);
-    } catch (err) {
-      setIsForgotLoading(false);
-      console.error("Erreur forgot password:", err);
-      setForgotSubmitted(true);
     }
   };
 
@@ -312,19 +378,19 @@ export default function LoginScreen({
     setIsResetLoading(true);
 
     try {
-      // 1. Update password in Supabase Auth if session active
-      try {
-        const { error: supaErr } = await supabase.auth.updateUser({
-          password: newPassword
-        });
-        if (supaErr) {
-          console.warn("Supabase auth.updateUser notice:", supaErr.message);
-        }
-      } catch (authEx) {
-        console.warn("Supabase auth updateUser exception:", authEx);
+      // 1. Update password in Supabase Auth
+      const { error: supaErr } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (supaErr) {
+        console.error("Erreur supabase.auth.updateUser:", supaErr);
+        setResetPasswordError(supaErr.message || 'Erreur lors de la mise à jour du mot de passe.');
+        setIsResetLoading(false);
+        return;
       }
 
-      // 2. Update user in local/synced state
+      // 2. Update user in local / synced state
       if (resetTargetUser && onResetPassword) {
         onResetPassword(resetTargetUser.id, newPassword);
         if (onLogEvent) {
@@ -332,17 +398,24 @@ export default function LoginScreen({
         }
       }
 
+      // Clear URL tokens
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (historyErr) {
+        console.warn("Could not clean URL history:", historyErr);
+      }
+
       setIsResetLoading(false);
       setIsResetModalOpen(false);
       setIsForgotPasswordOpen(false);
-      setSuccessMsg('Votre mot de passe a été mis à jour avec succès ! Vous pouvez maintenant vous connecter.');
+      setSuccessMsg('Mot de passe mis à jour avec succès ! Vous pouvez maintenant vous connecter.');
       setPasswordInput(newPassword);
       if (resetTargetUser) {
         setIdentifierInput(resetTargetUser.email || resetTargetUser.username);
       }
     } catch (err: any) {
       setIsResetLoading(false);
-      console.error("Erreur mise à jour mot de passe:", err);
+      console.error("Erreur inattendue lors de la mise à jour du mot de passe:", err);
       setResetPasswordError(err?.message || 'Erreur lors de la mise à jour du mot de passe.');
     }
   };
@@ -490,12 +563,7 @@ export default function LoginScreen({
             <div className="flex items-center justify-between pt-3 text-xs font-semibold border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => {
-                  setForgotEmail('');
-                  setForgotError('');
-                  setForgotSubmitted(false);
-                  setIsForgotPasswordOpen(true);
-                }}
+                onClick={() => setIsForgotPasswordOpen(true)}
                 className="text-[#0062FF] hover:text-blue-800 hover:underline transition-all cursor-pointer inline-flex items-center gap-1"
                 id="link-forgot-password"
               >
@@ -559,13 +627,13 @@ export default function LoginScreen({
             <div className="p-6 overflow-y-auto space-y-4">
               {regSubmitted ? (
                 <div className="space-y-4 text-center py-4">
-                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-200">
+                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-200 shadow-xs">
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
                   <div>
                     <h4 className="text-base font-extrabold text-slate-900">Demande transmise avec succès !</h4>
                     <p className="text-xs text-slate-600 mt-2 leading-relaxed max-w-md mx-auto">
-                      Un e-mail de notification a été adressé à votre administrateur. Quand votre compte sera validé, vous recevrez un lien pour configurer votre mot de passe à l'adresse <strong>{regEmail}</strong>.
+                      Votre demande a été transmise à votre administrateur. Vous recevrez une confirmation dès que votre compte sera validé.
                     </p>
                   </div>
                   <div className="pt-3">
@@ -657,8 +725,98 @@ export default function LoginScreen({
                     </div>
                   </div>
 
+                  {/* Password fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Créer un mot de passe <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                          <Lock className="w-4 h-4" />
+                        </div>
+                        <input
+                          type={showRegPassword ? "text" : "password"}
+                          value={regPassword}
+                          onChange={(e) => setRegPassword(e.target.value)}
+                          placeholder="••••••••••••"
+                          className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:bg-white focus:border-[#0062FF] outline-none font-mono"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowRegPassword(!showRegPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                          tabIndex={-1}
+                        >
+                          {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Confirmer le mot de passe <span className="text-rose-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                          <Lock className="w-4 h-4" />
+                        </div>
+                        <input
+                          type={showRegConfirmPassword ? "text" : "password"}
+                          value={regConfirmPassword}
+                          onChange={(e) => setRegConfirmPassword(e.target.value)}
+                          placeholder="••••••••••••"
+                          className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:bg-white focus:border-[#0062FF] outline-none font-mono"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                          tabIndex={-1}
+                        >
+                          {showRegConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Password Security Rules Live Checklist */}
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-[11px]">
+                    <p className="font-bold text-slate-700">Règles de sécurité du mot de passe :</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
+                      <div className={`flex items-center gap-1.5 ${regPasswordRules.hasMinLength ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                        {regPasswordRules.hasMinLength ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mx-1 shrink-0" />}
+                        <span>12 caractères minimum</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${regPasswordRules.hasUppercase ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                        {regPasswordRules.hasUppercase ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mx-1 shrink-0" />}
+                        <span>Au moins 1 majuscule</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${regPasswordRules.hasLowercase ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                        {regPasswordRules.hasLowercase ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mx-1 shrink-0" />}
+                        <span>Au moins 1 minuscule</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${regPasswordRules.hasNumber ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                        {regPasswordRules.hasNumber ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mx-1 shrink-0" />}
+                        <span>Au moins 1 chiffre</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${regPasswordRules.hasSpecialChar ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                        {regPasswordRules.hasSpecialChar ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mx-1 shrink-0" />}
+                        <span>1 caractère spécial (@$!%*?&#...)</span>
+                      </div>
+                      {regConfirmPassword && (
+                        <div className={`flex items-center gap-1.5 ${regPassword === regConfirmPassword ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold'}`}>
+                          {regPassword === regConfirmPassword ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
+                          <span>{regPassword === regConfirmPassword ? 'Mots de passe identiques' : 'Mots de passe différents'}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <p className="text-[11px] text-slate-500 leading-relaxed bg-blue-50/60 p-3 rounded-xl border border-blue-100">
-                    ℹ️ Dès validation par l'administrateur, un e-mail automatique contenant le lien de configuration de votre mot de passe vous sera envoyé.
+                    ℹ️ Votre compte sera créé immédiatement avec ce mot de passe. Votre administrateur sera notifié pour vous attribuer vos droits d'accès.
                   </p>
 
                   <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -678,7 +836,7 @@ export default function LoginScreen({
                       {isRegLoading ? (
                         <>
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Envoi en cours...</span>
+                          <span>Création du compte...</span>
                         </>
                       ) : (
                         <>
@@ -691,16 +849,16 @@ export default function LoginScreen({
 
                 </form>
               )}
+
             </div>
 
           </div>
         </div>
       )}
-
-      {/* Modal 2: Mot de passe oublié */}
+              {/* Modal 2: Mot de passe oublié (Contact Administrateur) */}
       {isForgotPasswordOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in" id="modal-forgot-password">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-scale-in flex flex-col">
             
             <div className="bg-[#082C66] text-white p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -708,8 +866,8 @@ export default function LoginScreen({
                   <RotateCcw className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-base leading-tight">Réinitialisation du mot de passe</h3>
-                  <p className="text-xs text-blue-200 font-normal">Saisissez votre adresse e-mail pour recevoir le lien sécurisé</p>
+                  <h3 className="font-extrabold text-base leading-tight">Mot de passe oublié</h3>
+                  <p className="text-xs text-blue-200 font-normal">Procédure de réinitialisation</p>
                 </div>
               </div>
               <button
@@ -720,115 +878,30 @@ export default function LoginScreen({
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4">
-              {forgotSubmitted ? (
-                <div className="space-y-4 text-center py-3">
-                  <div className="w-14 h-14 bg-blue-50 text-[#0062FF] rounded-full flex items-center justify-center mx-auto border border-blue-200">
-                    <Mail className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-extrabold text-slate-900">E-mail de réinitialisation envoyé !</h4>
-                    <p className="text-xs text-slate-600 mt-2 leading-relaxed max-w-md mx-auto">
-                      Un lien sécurisé de réinitialisation de mot de passe a été envoyé à <strong>{forgotEmail}</strong>. Veuillez vérifier votre boîte de réception.
-                    </p>
-                  </div>
+            <div className="p-6 space-y-5 text-center">
+              <div className="w-14 h-14 bg-blue-50 text-[#0062FF] rounded-full flex items-center justify-center mx-auto border border-blue-200">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="text-base font-extrabold text-slate-900 leading-snug">
+                  Merci de contacter votre administrateur pour réinitialiser votre mot de passe.
+                </h4>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Pour des raisons de sécurité, les liens de réinitialisation sont générés manuellement par les administrateurs de votre plateforme.
+                </p>
+              </div>
 
-                  {/* Direct Test Option to define the new password immediately */}
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-left space-y-2">
-                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      Lien direct de réinitialisation (Simulation active) :
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewPassword('');
-                        setConfirmPassword('');
-                        setResetPasswordError('');
-                        setIsResetModalOpen(true);
-                      }}
-                      className="w-full py-2 px-3 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white text-xs font-bold rounded-lg transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2"
-                      id="btn-open-reset-screen"
-                    >
-                      <span>Ouvrir la page de réinitialisation de mot de passe</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsForgotPasswordOpen(false)}
-                      className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
-                    >
-                      Fermer
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
-                  
-                  {forgotError && (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>{forgotError}</span>
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Adresse e-mail associée à votre compte <span className="text-rose-600">*</span>
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <Mail className="w-4 h-4" />
-                      </div>
-                      <input
-                        type="email"
-                        value={forgotEmail}
-                        onChange={(e) => setForgotEmail(e.target.value)}
-                        placeholder="Ex: martin@hubjob.fr"
-                        className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium focus:bg-white focus:border-[#0062FF] outline-none"
-                        required
-                        autoFocus
-                      />
-                    </div>
-                  </div>
-
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Un e-mail automatique contenant un lien sécurisé permettant de réinitialiser votre mot de passe (respectant la règle des 12 caractères) vous sera immédiatement envoyé.
-                  </p>
-
-                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setIsForgotPasswordOpen(false)}
-                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isForgotLoading}
-                      className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                      id="btn-send-reset-link"
-                    >
-                      {isForgotLoading ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Envoi en cours...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-3.5 h-3.5" />
-                          <span>Envoyer le lien de réinitialisation</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                </form>
-              )}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsForgotPasswordOpen(false)}
+                  className="w-full py-2.5 px-4 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                  id="btn-close-forgot-modal"
+                >
+                  J'ai compris
+                </button>
+              </div>
             </div>
 
           </div>
@@ -848,156 +921,201 @@ export default function LoginScreen({
                 <div>
                   <h3 className="font-extrabold text-base leading-tight">Nouveau mot de passe</h3>
                   <p className="text-xs text-blue-200 font-normal">
-                    {resetTargetUser ? `Compte : ${resetTargetUser.firstName} ${resetTargetUser.lastName}` : 'Définition du mot de passe'}
+                    {resetTargetUser ? `Compte : ${resetTargetUser.firstName} ${resetTargetUser.lastName}` : 'Définition de votre mot de passe'}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsResetModalOpen(false)}
+                onClick={() => {
+                  try {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                  } catch (e) {}
+                  setIsResetModalOpen(false);
+                }}
                 className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveNewPassword} className="p-6 overflow-y-auto space-y-4">
-              
-              {resetPasswordError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{resetPasswordError}</span>
+            {recoverySessionStatus === 'checking' ? (
+              <div className="p-10 text-center space-y-3">
+                <Loader2 className="w-8 h-8 text-[#0062FF] animate-spin mx-auto" />
+                <p className="text-xs font-bold text-slate-700">Vérification de la validité du lien de récupération...</p>
+              </div>
+            ) : recoverySessionStatus === 'invalid' ? (
+              <div className="p-6 text-center space-y-4">
+                <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto border border-rose-200">
+                  <AlertCircle className="w-7 h-7" />
                 </div>
-              )}
-
-              {/* Nouveau mot de passe */}
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Nouveau mot de passe <span className="text-rose-600">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => {
-                      setNewPassword(e.target.value);
-                      if (resetPasswordError) setResetPasswordError('');
-                    }}
-                    placeholder="Au moins 12 caractères..."
-                    className="w-full px-3 py-2.5 pr-10 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:border-[#0062FF] outline-none font-mono tracking-wider"
-                    required
-                    autoFocus
-                  />
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold text-slate-900 leading-snug">
+                    Lien invalide ou expiré, contactez votre administrateur pour en obtenir un nouveau.
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Les liens de récupération de mot de passe ont une durée de validité limitée pour votre sécurité.
+                  </p>
+                </div>
+                <div className="pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                    tabIndex={-1}
+                    onClick={() => {
+                      try {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                      } catch (e) {}
+                      setIsResetModalOpen(false);
+                    }}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
                   >
-                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    Retour à la connexion
                   </button>
                 </div>
               </div>
+            ) : (
+              <form onSubmit={handleSaveNewPassword} className="p-6 overflow-y-auto space-y-4">
+                
+                {resetPasswordError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{resetPasswordError}</span>
+                  </div>
+                )}
 
-              {/* Confirmation */}
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Confirmer le mot de passe <span className="text-rose-600">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => {
-                      setConfirmPassword(e.target.value);
-                      if (resetPasswordError) setResetPasswordError('');
-                    }}
-                    placeholder="Confirmez à l'identique..."
-                    className="w-full px-3 py-2.5 pr-10 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:border-[#0062FF] outline-none font-mono tracking-wider"
-                    required
-                  />
+                {/* Nouveau mot de passe */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Nouveau mot de passe <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        if (resetPasswordError) setResetPasswordError('');
+                      }}
+                      placeholder="Au moins 12 caractères..."
+                      className="w-full px-3 py-2.5 pr-10 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:border-[#0062FF] outline-none font-mono tracking-wider"
+                      required
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      tabIndex={-1}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirmation */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Confirmer le mot de passe <span className="text-rose-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (resetPasswordError) setResetPasswordError('');
+                      }}
+                      placeholder="Confirmez à l'identique..."
+                      className="w-full px-3 py-2.5 pr-10 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:bg-white focus:border-[#0062FF] outline-none font-mono tracking-wider"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Password Complexity Checklist Box */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                  <p className="text-xs font-bold text-slate-700">Règles de sécurité requises (12 caractères min) :</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    
+                    <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasMinLength ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasMinLength ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
+                        {passwordRules.hasMinLength ? <Check className="w-2.5 h-2.5" /> : '•'}
+                      </div>
+                      <span>Minimum 12 caractères ({newPassword.length}/12)</span>
+                    </div>
+
+                    <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasUppercase ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasUppercase ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
+                        {passwordRules.hasUppercase ? <Check className="w-2.5 h-2.5" /> : '•'}
+                      </div>
+                      <span>Au moins 1 majuscule (A-Z)</span>
+                    </div>
+
+                    <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasLowercase ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasLowercase ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
+                        {passwordRules.hasLowercase ? <Check className="w-2.5 h-2.5" /> : '•'}
+                      </div>
+                      <span>Au moins 1 minuscule (a-z)</span>
+                    </div>
+
+                    <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasNumber ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasNumber ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
+                        {passwordRules.hasNumber ? <Check className="w-2.5 h-2.5" /> : '•'}
+                      </div>
+                      <span>Au moins 1 chiffre (0-9)</span>
+                    </div>
+
+                    <div className={`flex items-center gap-1.5 font-medium sm:col-span-2 ${passwordRules.hasSpecialChar ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasSpecialChar ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
+                        {passwordRules.hasSpecialChar ? <Check className="w-2.5 h-2.5" /> : '•'}
+                      </div>
+                      <span>Au moins 1 caractère spécial (!@#$%^&*...)</span>
+                    </div>
+
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                    tabIndex={-1}
+                    onClick={() => {
+                      try {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                      } catch (e) {}
+                      setIsResetModalOpen(false);
+                    }}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
                   >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isResetLoading || !passwordRules.isValid || newPassword !== confirmPassword}
+                    className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    id="btn-confirm-save-password"
+                  >
+                    {isResetLoading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Validation en cours...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Valider le mot de passe</span>
+                      </>
+                    )}
                   </button>
                 </div>
-              </div>
 
-              {/* Password Complexity Checklist Box */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
-                <p className="text-xs font-bold text-slate-700">Règles de sécurité requises (12 caractères min) :</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                  
-                  <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasMinLength ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasMinLength ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
-                      {passwordRules.hasMinLength ? <Check className="w-2.5 h-2.5" /> : '•'}
-                    </div>
-                    <span>Minimum 12 caractères ({newPassword.length}/12)</span>
-                  </div>
-
-                  <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasUppercase ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasUppercase ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
-                      {passwordRules.hasUppercase ? <Check className="w-2.5 h-2.5" /> : '•'}
-                    </div>
-                    <span>Au moins 1 majuscule (A-Z)</span>
-                  </div>
-
-                  <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasLowercase ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasLowercase ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
-                      {passwordRules.hasLowercase ? <Check className="w-2.5 h-2.5" /> : '•'}
-                    </div>
-                    <span>Au moins 1 minuscule (a-z)</span>
-                  </div>
-
-                  <div className={`flex items-center gap-1.5 font-medium ${passwordRules.hasNumber ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasNumber ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
-                      {passwordRules.hasNumber ? <Check className="w-2.5 h-2.5" /> : '•'}
-                    </div>
-                    <span>Au moins 1 chiffre (0-9)</span>
-                  </div>
-
-                  <div className={`flex items-center gap-1.5 font-medium sm:col-span-2 ${passwordRules.hasSpecialChar ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${passwordRules.hasSpecialChar ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'}`}>
-                      {passwordRules.hasSpecialChar ? <Check className="w-2.5 h-2.5" /> : '•'}
-                    </div>
-                    <span>Au moins 1 caractère spécial (!@#$%^&*...)</span>
-                  </div>
-
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsResetModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isResetLoading || !passwordRules.isValid || newPassword !== confirmPassword}
-                  className="px-5 py-2.5 bg-[#0062FF] hover:bg-[#0062FF]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                  id="btn-confirm-save-password"
-                >
-                  {isResetLoading ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Validation en cours...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Valider le mot de passe</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-            </form>
+              </form>
+            )}
 
           </div>
         </div>
