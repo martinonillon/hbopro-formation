@@ -515,6 +515,48 @@ export function sanitizeItemForTable(tableName: string, item: any): Record<strin
     return clean;
   }
 
+  if (tableName === 'recruitments') {
+    const clean: Record<string, any> = {};
+    clean.id = item.id;
+    
+    const collabId = strOrEmpty(item.collaboratorId || item.collaborator_id);
+    clean.collaboratorId = collabId;
+    clean.collaborator_id = collabId;
+
+    const collabName = strOrNull(item.collaboratorName || item.collaborator_name);
+    clean.collaboratorName = collabName;
+    clean.collaborator_name = collabName;
+
+    clean.recruteur = strOrEmpty(item.recruteur);
+
+    const dEnt = toSqlDateOrNull(item.dateEntretien || item.date_entretien);
+    clean.dateEntretien = dEnt;
+    clean.date_entretien = dEnt;
+
+    const dInteg = toSqlDateOrNull(item.dateIntegrationPrevue || item.date_integration_prevue);
+    clean.dateIntegrationPrevue = dInteg;
+    clean.date_integration_prevue = dInteg;
+
+    clean.commentaires = strOrNull(item.commentaires);
+    clean.status = strOrEmpty(item.status || 'en_cours');
+    clean.checklist = item.checklist || {};
+
+    const cAt = item.createdAt || item.created_at || new Date().toISOString();
+    clean.createdAt = cAt;
+    clean.created_at = cAt;
+
+    const uAt = item.updatedAt || item.updated_at || new Date().toISOString();
+    clean.updatedAt = uAt;
+    clean.updated_at = uAt;
+
+    if (item.archivedAt || item.archived_at) {
+      const dArch = toSqlDateOrNull(item.archivedAt || item.archived_at);
+      clean.archivedAt = dArch;
+      clean.archived_at = dArch;
+    }
+    return clean;
+  }
+
   // General fallback: remove undefined and non-serializable fields
   const clean: Record<string, any> = {};
   Object.keys(item).forEach(key => {

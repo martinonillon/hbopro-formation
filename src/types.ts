@@ -123,6 +123,7 @@ export interface RecruitmentChecklist {
   demandeTca: IntegrationChecklistValue;
   commandeFormation: IntegrationChecklistValue;
   envoiLivretAccueil: IntegrationChecklistValue;
+  miseAuxNormesDossierRh?: IntegrationChecklistValue;
 }
 
 export type RecruitmentStatus = 'en_cours' | 'mise_en_poste' | 'annule';

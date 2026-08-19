@@ -9,7 +9,8 @@ export const DEFAULT_CHECKLIST: RecruitmentChecklist = {
   fichePlanete: 'N/A',
   demandeTca: 'N/A',
   commandeFormation: 'N/A',
-  envoiLivretAccueil: 'N/A'
+  envoiLivretAccueil: 'N/A',
+  miseAuxNormesDossierRh: 'N/A'
 };
 
 export const INITIAL_RECRUITMENTS: RecruitmentRecord[] = [
@@ -29,7 +30,8 @@ export const INITIAL_RECRUITMENTS: RecruitmentRecord[] = [
       fichePlanete: 'N/A',
       demandeTca: 'N/A',
       commandeFormation: 'N/A',
-      envoiLivretAccueil: 'N/A'
+      envoiLivretAccueil: 'N/A',
+      miseAuxNormesDossierRh: 'N/A'
     },
     commentaires: 'Candidat très motivé. Expérience préalable sur piste aéroportuaire. Permis B. Dossier en cours de constitution.',
     status: 'en_cours',
@@ -52,7 +54,8 @@ export const INITIAL_RECRUITMENTS: RecruitmentRecord[] = [
       fichePlanete: 'N/A',
       demandeTca: 'N/A',
       commandeFormation: 'N/A',
-      envoiLivretAccueil: 'N/A'
+      envoiLivretAccueil: 'N/A',
+      miseAuxNormesDossierRh: 'N/A'
     },
     commentaires: 'Entretien validé. En attente de finalisation de la fiche Planète et de la confirmation de commande session formation CACES.',
     status: 'en_cours',
@@ -75,7 +78,8 @@ export const INITIAL_RECRUITMENTS: RecruitmentRecord[] = [
       fichePlanete: 'Oui',
       demandeTca: 'Oui',
       commandeFormation: 'Oui',
-      envoiLivretAccueil: 'Oui'
+      envoiLivretAccueil: 'Oui',
+      miseAuxNormesDossierRh: 'Oui'
     },
     commentaires: 'Recrutement finalisé avec succès. Mise en poste effectuée sur escale MRS au service PASSAGE.',
     status: 'mise_en_poste',

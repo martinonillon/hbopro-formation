@@ -50,6 +50,7 @@ interface RecruitmentAppProps {
   onAddRecruitment: (recruitmentData: Omit<RecruitmentRecord, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateRecruitment: (recruitmentId: string, updates: Partial<RecruitmentRecord>) => void;
   onDeleteRecruitment: (recruitmentId: string) => void;
+  onUpdateCollaborator?: (collab: Collaborator) => void;
   onViewCollaboratorProfile?: (collabId: string) => void;
   isReadOnly?: boolean;
 }
@@ -68,6 +69,7 @@ const CHECKLIST_FIELDS: Array<{
   { key: 'demandeTca', label: 'Demande TCA', icon: CreditCard },
   { key: 'commandeFormation', label: 'Commande formation', icon: BookOpen },
   { key: 'envoiLivretAccueil', label: "Envoi livret d'accueil", icon: ShieldCheck },
+  { key: 'miseAuxNormesDossierRh', label: 'Mise aux normes dossier RH', icon: ShieldCheck },
 ];
 
 export default function RecruitmentApp({
@@ -77,6 +79,7 @@ export default function RecruitmentApp({
   onAddRecruitment,
   onUpdateRecruitment,
   onDeleteRecruitment,
+  onUpdateCollaborator,
   onViewCollaboratorProfile,
   isReadOnly = false
 }: RecruitmentAppProps) {
@@ -119,6 +122,70 @@ export default function RecruitmentApp({
 
   // Modal for delete confirmation
   const [recruitmentToDelete, setRecruitmentToDelete] = useState<RecruitmentRecord | null>(null);
+
+  // States for "Mise en poste" confirmation and collaborator editing workflow
+  const [activeTransitionRecruitment, setActiveTransitionRecruitment] = useState<RecruitmentRecord | null>(null);
+  const [showTransitionModal, setShowTransitionModal] = useState(false);
+  const [showEditCollabModalForTransition, setShowEditCollabModalForTransition] = useState(false);
+  const [collabEditFormData, setCollabEditFormData] = useState<Collaborator | null>(null);
+
+  // Triggered when clicking "Mise en poste"
+  const handleTriggerMiseEnPoste = (rec: RecruitmentRecord) => {
+    if (isReadOnly) return;
+    setActiveTransitionRecruitment(rec);
+    setShowTransitionModal(true);
+  };
+
+  // Option "Oui": prefill collaborator and show edit form modal
+  const handleTransitionOptionOui = () => {
+    if (!activeTransitionRecruitment) return;
+    const collab = collaborators.find(c => c.id === activeTransitionRecruitment.collaboratorId);
+    if (collab) {
+      setCollabEditFormData({ ...collab });
+    } else {
+      setCollabEditFormData({
+        id: activeTransitionRecruitment.collaboratorId || '',
+        firstName: activeTransitionRecruitment.collaboratorName?.split(' ')[0] || '',
+        lastName: activeTransitionRecruitment.collaboratorName?.split(' ').slice(1).join(' ') || '',
+        email: '',
+        phone: '',
+        escale: 'BOD',
+        service: 'PISTE',
+        poste: '',
+        coefficient: '',
+        matricule: '',
+        avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?w=150&auto=format&fit=crop&q=80`
+      });
+    }
+    setShowTransitionModal(false);
+    setShowEditCollabModalForTransition(true);
+  };
+
+  // Option "Non": update recruitment to "mise_en_poste" directly
+  const handleTransitionOptionNon = () => {
+    if (!activeTransitionRecruitment) return;
+    handleStatusChange(activeTransitionRecruitment, 'mise_en_poste');
+    setShowTransitionModal(false);
+    setActiveTransitionRecruitment(null);
+  };
+
+  // Save edit form modal and then update recruitment to "mise_en_poste"
+  const handleSaveCollabAndFinalizeTransition = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTransitionRecruitment || !collabEditFormData) return;
+    
+    // Call the parent update function
+    if (onUpdateCollaborator) {
+      onUpdateCollaborator(collabEditFormData);
+    }
+    
+    // Progress recruitment status to mise_en_poste
+    handleStatusChange(activeTransitionRecruitment, 'mise_en_poste');
+    
+    setShowEditCollabModalForTransition(false);
+    setActiveTransitionRecruitment(null);
+    setCollabEditFormData(null);
+  };
 
   // Local state for notification / toast banner
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'warning' } | null>(null);
@@ -255,7 +322,8 @@ export default function RecruitmentApp({
       fichePlanete: 'Oui',
       demandeTca: 'Oui',
       commandeFormation: 'Oui',
-      envoiLivretAccueil: 'Oui'
+      envoiLivretAccueil: 'Oui',
+      miseAuxNormesDossierRh: 'Oui'
     };
     onUpdateRecruitment(recId, { checklist: allOui });
     showToast('Toutes les étapes ont été cochées en "Oui".', 'info');
@@ -295,7 +363,7 @@ export default function RecruitmentApp({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6 animate-fade-in pb-16" id="recruitment-app-container">
+    <div className="w-full space-y-6 animate-fade-in pb-16" id="recruitment-app-container">
       
       {/* Toast Notification Banner */}
       {toastMessage && (
@@ -334,7 +402,7 @@ export default function RecruitmentApp({
               </span>
             </div>
             <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed font-normal">
-              Pilotez les recrutements actifs, validez chaque étape d'intégration en 9 points et archivez automatiquement les parcours d'accueil dans la Base Intérimaires.
+              Pilotez les recrutements actifs, validez chaque étape d'intégration en 10 points et archivez automatiquement les parcours d'accueil dans la Base Intérimaires.
             </p>
           </div>
 
@@ -538,7 +606,7 @@ export default function RecruitmentApp({
                 // Count Oui, Non, N/A
                 const checkValues = Object.values(rec.checklist);
                 const countOui = checkValues.filter(v => v === 'Oui').length;
-                const countTotal = 9;
+                const countTotal = CHECKLIST_FIELDS.length;
                 const percentDone = Math.round((countOui / countTotal) * 100);
                 const isExpanded = expandedCardIds.has(rec.id);
 
@@ -618,7 +686,7 @@ export default function RecruitmentApp({
                         <div className="bg-slate-800/90 border border-slate-700 px-2.5 py-1 rounded-xl flex items-center gap-2">
                           <div className="text-right">
                             <span className="text-[9px] text-slate-400 font-bold block uppercase leading-tight">Conformité</span>
-                            <span className="text-[11px] font-black text-emerald-400 font-mono leading-tight">{countOui}/9 ({percentDone}%)</span>
+                            <span className="text-[11px] font-black text-emerald-400 font-mono leading-tight">{countOui}/{countTotal} ({percentDone}%)</span>
                           </div>
                           <div className="w-8 bg-slate-700 rounded-full h-1.5 overflow-hidden">
                             <div className="bg-emerald-500 h-full transition-all" style={{ width: `${percentDone}%` }} />
@@ -714,7 +782,7 @@ export default function RecruitmentApp({
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                             <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                               <ShieldCheck className="h-3.5 w-3.5 text-purple-600" />
-                              Checklist d'intégration & Conformité (9 critères)
+                              Checklist d'intégration & Conformité ({CHECKLIST_FIELDS.length} critères)
                             </h4>
 
                             {!isReadOnly && (
@@ -841,7 +909,7 @@ export default function RecruitmentApp({
                               {/* 1. Bouton Coche Verte ("Mise en poste") */}
                               <button
                                 type="button"
-                                onClick={() => handleStatusChange(rec, 'mise_en_poste')}
+                                onClick={() => handleTriggerMiseEnPoste(rec)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 ${
                                   rec.status === 'mise_en_poste'
                                     ? 'bg-emerald-600 text-white ring-2 ring-emerald-400 ring-offset-1'
@@ -1014,7 +1082,7 @@ export default function RecruitmentApp({
 
                           {/* Résumé Checklist (4 colonnes) */}
                           <div className="space-y-1.5">
-                            <span className="text-[11px] font-bold text-slate-600 block uppercase">Conformité Checklist (9 critères)</span>
+                            <span className="text-[11px] font-bold text-slate-600 block uppercase">Conformité Checklist ({CHECKLIST_FIELDS.length} critères)</span>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                               {CHECKLIST_FIELDS.map(f => {
                                 const val = rec.checklist[f.key] || 'N/A';
@@ -1274,6 +1342,225 @@ export default function RecruitmentApp({
                 Supprimer définitivement
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1. CONFIRMATION POPUP FOR "MISE EN POSTE" */}
+      {showTransitionModal && activeTransitionRecruitment && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="transition-confirm-modal">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100 space-y-4 animate-scale-in">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Validation de la mise en poste</h3>
+                <p className="text-xs text-slate-500">Intérimaire : {activeTransitionRecruitment.collaboratorName}</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-600 leading-relaxed font-semibold">
+              Souhaitez-vous mettre à jour la fiche intérimaire avec de nouvelles données ? (Matricule, poste, coefficient...)
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTransitionModal(false);
+                  setActiveTransitionRecruitment(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-center"
+              >
+                Annuler
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleTransitionOptionNon}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer text-center"
+                id="transition-option-non-btn"
+              >
+                Non, valider directement
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTransitionOptionOui}
+                className="px-4 py-2 bg-[#0062FF] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer text-center"
+                id="transition-option-oui-btn"
+              >
+                Oui, mettre à jour la fiche
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. UPDATE COLLABORATOR MODAL FOR TRANSITION */}
+      {showEditCollabModalForTransition && activeTransitionRecruitment && collabEditFormData && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="transition-edit-collab-modal">
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto animate-scale-in">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-3 bg-blue-50 text-[#0062FF] rounded-xl">
+                <FileText className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Mettre à jour la fiche de l'intérimaire</h3>
+                <p className="text-xs text-slate-500">Modifications enregistrées dans la Base intérimaires lors de l'archivage.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCollabAndFinalizeTransition} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                
+                {/* Nom */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Nom</label>
+                  <input
+                    type="text"
+                    required
+                    value={collabEditFormData.lastName}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, lastName: e.target.value } : null)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  />
+                </div>
+
+                {/* Prénom */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Prénom</label>
+                  <input
+                    type="text"
+                    required
+                    value={collabEditFormData.firstName}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, firstName: e.target.value } : null)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  />
+                </div>
+
+                {/* Matricule ANAEL */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Matricule ANAEL</label>
+                  <input
+                    type="text"
+                    value={collabEditFormData.matricule || ''}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, matricule: e.target.value } : null)}
+                    placeholder="Ex: 504382"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  />
+                </div>
+
+                {/* E-mail */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">E-mail</label>
+                  <input
+                    type="email"
+                    value={collabEditFormData.email || ''}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, email: e.target.value } : null)}
+                    placeholder="Ex: email@adresse.fr"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  />
+                </div>
+
+                {/* Téléphone */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Téléphone</label>
+                  <input
+                    type="text"
+                    value={collabEditFormData.phone || ''}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, phone: e.target.value } : null)}
+                    placeholder="Ex: 06 12 34 56 78"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  />
+                </div>
+
+                {/* Escale */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Escale</label>
+                  <select
+                    value={collabEditFormData.escale}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, escale: e.target.value } : null)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  >
+                    {ESCALES.map(esc => (
+                      <option key={esc} value={esc}>{esc}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Service */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Service</label>
+                  <select
+                    value={collabEditFormData.service}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, service: e.target.value } : null)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  >
+                    {SERVICES.map(srv => (
+                      <option key={srv} value={srv}>{srv}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Poste */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Poste (Métier)</label>
+                  <input
+                    type="text"
+                    value={collabEditFormData.poste || ''}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, poste: e.target.value } : null)}
+                    placeholder="Ex: Agent de Piste"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  />
+                </div>
+
+                {/* Coefficient */}
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Coefficient</label>
+                  <input
+                    type="text"
+                    value={collabEditFormData.coefficient || ''}
+                    onChange={(e) => setCollabEditFormData(prev => prev ? { ...prev, coefficient: e.target.value } : null)}
+                    placeholder="Ex: 175"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+                  />
+                </div>
+
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditCollabModalForTransition(false);
+                    setShowTransitionModal(true);
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Retour
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditCollabModalForTransition(false);
+                    setActiveTransitionRecruitment(null);
+                    setCollabEditFormData(null);
+                  }}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                  id="transition-edit-save-btn"
+                >
+                  <Check className="h-4 w-4" />
+                  Enregistrer et Finaliser la mise en poste
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

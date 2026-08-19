@@ -29,7 +29,8 @@ import {
   FolderGit2,
   BookUser,
   TrendingUp,
-  FileText
+  FileText,
+  GraduationCap
 } from 'lucide-react';
 import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact, RegistrationRequest, DEFAULT_PROVISIONAL_PASSWORD, RecruitmentRecord } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
@@ -105,18 +106,7 @@ export default function App() {
   const [isContactsDirectoryOpen, setIsContactsDirectoryOpen] = useState(false);
 
   // Recrutements & Parcours d'intégration
-  const [recruitments, setRecruitments] = useState<RecruitmentRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('hubstation_recruitments');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {
-      console.warn("Erreur lecture hubstation_recruitments localStorage", e);
-    }
-    return INITIAL_RECRUITMENTS;
-  });
+  const [recruitments, setRecruitments] = useState<RecruitmentRecord[]>(INITIAL_RECRUITMENTS);
 
   // Sauvegarde automatique des recrutements dans le localStorage
   useEffect(() => {
@@ -136,15 +126,27 @@ export default function App() {
       updatedAt: new Date().toISOString()
     };
     setRecruitments(prev => [newRecord, ...prev]);
+    saveItemToFirestore('recruitments', newRecord);
+    saveToSupabase('recruitments', newRecord, handleSupabaseWriteError);
     addEvent(`Nouvelle fiche de recrutement créée pour ${newRecord.collaboratorName}`, 'success');
   };
 
   const handleUpdateRecruitment = (recId: string, updates: Partial<RecruitmentRecord>) => {
-    setRecruitments(prev => prev.map(r => r.id === recId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r));
+    setRecruitments(prev => prev.map(r => {
+      if (r.id === recId) {
+        const updated = { ...r, ...updates, updatedAt: new Date().toISOString() };
+        saveItemToFirestore('recruitments', updated);
+        saveToSupabase('recruitments', updated, handleSupabaseWriteError);
+        return updated;
+      }
+      return r;
+    }));
   };
 
   const handleDeleteRecruitment = (recId: string) => {
     setRecruitments(prev => prev.filter(r => r.id !== recId));
+    deleteItemFromFirestore('recruitments', recId);
+    deleteFromSupabase('recruitments', recId, handleSupabaseWriteError);
   };
 
   // Demandes d'inscription (Workflow Première Connexion)
@@ -581,6 +583,7 @@ export default function App() {
     const unsubSupaUsers = syncSupabaseTable('users', setUsers, [], handleSyncError);
     const unsubSupaContacts = syncSupabaseTable('contacts', setContacts, [], handleSyncError);
     const unsubSupaRegistrationReqs = syncSupabaseTable('registration_requests', setRegistrationRequests, [], handleSyncError);
+    const unsubSupaRecruitments = syncSupabaseTable('recruitments', setRecruitments, [], handleSyncError);
 
     // Fallback Firestore real-time sync
     const unsubCollabs = syncCollection('collaborators', setCollaborators, []);
@@ -596,6 +599,7 @@ export default function App() {
     const unsubUsers = syncCollection('users', setUsers, []);
     const unsubContacts = syncCollection('contacts', setContacts, []);
     const unsubRegistrationReqs = syncCollection('registration_requests', setRegistrationRequests, []);
+    const unsubRecruitments = syncCollection('recruitments', setRecruitments, []);
 
     return () => {
       unsubSupaCollabs();
@@ -604,12 +608,14 @@ export default function App() {
       unsubSupaUsers();
       unsubSupaContacts();
       unsubSupaRegistrationReqs();
+      unsubSupaRecruitments();
       unsubCollabs();
       unsubLogs();
       unsubModules();
       unsubUsers();
       unsubContacts();
       unsubRegistrationReqs();
+      unsubRecruitments();
     };
   }, []);
 
@@ -2098,13 +2104,41 @@ export default function App() {
             
             {/* Secondary Navigation inside Formation application */}
             {['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'catalog', 'consolidation'].includes(activeTab) && userPerms.formation !== 'Masquer' && (
-              <FormationSubNav
-                activeTab={activeTab}
-                onSelectTab={(tab) => {
-                  if (tab === 'logs') setLogsFilter(null);
-                  setActiveTab(tab);
-                }}
-              />
+              <>
+                {/* 1. Bandeau Titre Principal */}
+                <div 
+                  className="bg-gradient-to-r from-[#061d43] via-[#0d2e6b] to-[#35ffd0]/70 rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden mb-6"
+                  id="formation-header-banner"
+                >
+                  <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
+                  <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                    <div className="space-y-1.5 max-w-2xl">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2.5 bg-[#35ffd0]/15 text-[#35ffd0] border border-[#35ffd0]/30 rounded-xl backdrop-blur-xs flex items-center justify-center">
+                          <GraduationCap className="w-6 h-6" />
+                        </div>
+                        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                          Formation
+                        </h1>
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#35ffd0]/15 text-[#35ffd0] border border-[#35ffd0]/30">
+                          Registre & Suivi de formation
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-200/90 leading-relaxed font-normal">
+                        Gérez le registre général des formations, planifiez les sessions, suivez la facturation, l'imputation et consolidez vos budgets.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <FormationSubNav
+                  activeTab={activeTab}
+                  onSelectTab={(tab) => {
+                    if (tab === 'logs') setLogsFilter(null);
+                    setActiveTab(tab);
+                  }}
+                />
+              </>
             )}
 
             {/* Render Active Tab */}
@@ -2256,6 +2290,7 @@ export default function App() {
                   onAddRecruitment={handleAddRecruitment}
                   onUpdateRecruitment={handleUpdateRecruitment}
                   onDeleteRecruitment={handleDeleteRecruitment}
+                  onUpdateCollaborator={handleUpdateCollaborator}
                   onViewCollaboratorProfile={(collabId) => {
                     setSelectedCollabId(collabId);
                     setActiveTab('collaborators');

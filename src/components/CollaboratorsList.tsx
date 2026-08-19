@@ -34,6 +34,7 @@ import {
   CheckSquare,
   Square,
   UserCheck,
+  Users,
   AlertTriangle
 } from 'lucide-react';
 import { Collaborator, TrainingLog, TrainingModule, RecruitmentRecord } from '../types';
@@ -1493,7 +1494,34 @@ export default function CollaboratorsList({
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" id="collaborators-main-grid">
+    <div className="w-full space-y-6" id="base-interimaires-container">
+      {/* 1. Bandeau de l'application */}
+      <div 
+        className="bg-gradient-to-r from-[#061d43] via-[#0d2e6b] to-[#38bdf8]/80 rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden"
+        id="base-interimaires-header-banner"
+      >
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30 rounded-xl backdrop-blur-xs flex items-center justify-center">
+                <Users className="w-6 h-6" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                Base intérimaires
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30">
+                Fiches agents & Habilitations
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-200/90 leading-relaxed font-normal">
+              Consultez les dossiers des intérimaires, gérez leurs habilitations, imputez les temps de formation et suivez la conformité globale par escale.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" id="collaborators-main-grid">
       
       {/* Left panel: List with Search/Filters */}
       <div className="xl:col-span-1 space-y-4">
@@ -3454,6 +3482,7 @@ export default function CollaboratorsList({
         </div>
       )}
 
+      </div>
     </div>
   );
 }

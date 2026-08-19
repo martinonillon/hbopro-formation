@@ -392,31 +392,40 @@ export default function AdminManagement({
   return (
     <div className="space-y-6 animate-fade-in" id="admin-management-container">
       
-      {/* Top Header Card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="bg-[#082C66] text-white p-2.5 rounded-xl shadow-xs">
-              <Shield className="h-6 w-6 text-[#35ffd0]" />
-            </span>
-            <div>
-              <h2 className="text-xl font-extrabold text-[#082C66] tracking-tight">Gestion des Droits d'Accès par Application</h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Régulez l'accès des collaborateurs aux applications métiers (Écriture, Lecture ou Masquer). L'accès à la page Accueil est garanti pour tous.
-              </p>
+      {/* Top Header Card with Unified Design */}
+      <div 
+        className="bg-gradient-to-r from-[#061d43] via-[#0d2e6b] to-[#818cf8]/75 rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden mb-6"
+        id="admin-header-banner"
+      >
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-[#818cf8]/15 text-[#818cf8] border border-[#818cf8]/30 rounded-xl backdrop-blur-xs flex items-center justify-center">
+                <Shield className="w-6 h-6" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                Administration
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#818cf8]/15 text-[#818cf8] border border-[#818cf8]/30">
+                Droits & Permissions d'accès
+              </span>
             </div>
+            <p className="text-xs sm:text-sm text-slate-200/90 leading-relaxed font-normal">
+              Régulez l'accès des collaborateurs aux applications métiers (Écriture, Lecture ou Masquer). L'accès à la page Accueil est garanti pour tous.
+            </p>
           </div>
-        </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          disabled={isReadOnly}
-          className="inline-flex items-center justify-center gap-2 bg-[#0062FF] hover:bg-[#0062FF]/90 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-[#0062FF]/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed self-start md:self-auto active:scale-95"
-          id="admin-add-user-btn"
-        >
-          <UserPlus className="h-4.5 w-4.5" />
-          Ajouter un utilisateur
-        </button>
+          <button
+            onClick={handleOpenAddModal}
+            disabled={isReadOnly}
+            className="inline-flex items-center justify-center gap-2 bg-[#818cf8] hover:bg-[#818cf8]/90 text-[#061d43] font-black px-4.5 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-[#818cf8]/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 active:scale-95 self-start md:self-auto"
+            id="admin-add-user-btn"
+          >
+            <UserPlus className="h-4 w-4" />
+            Ajouter un utilisateur
+          </button>
+        </div>
       </div>
 
       {/* Section : Demandes d'inscription en attente (Workflow Première Connexion) */}

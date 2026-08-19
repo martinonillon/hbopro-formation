@@ -197,19 +197,31 @@ export default function CoverageControl({ isReadOnly = false }: CoverageControlP
   return (
     <div className="space-y-6 animate-fade-in w-full" id="coverage-control-container">
       
-      {/* Main Header Banner */}
-      <div className="bg-gradient-to-r from-[#082C66] via-[#0D3B82] to-[#0062FF] rounded-2xl p-6 text-white shadow-md relative overflow-hidden border border-blue-900/30">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-              Contrôle de Couverture
-            </h1>
-            <p className="text-xs md:text-sm text-blue-100 max-w-3xl leading-relaxed">
-              Vérification automatisée de la couverture du planning par un contrat pour HubJob PROVINCE et ORLY
+      {/* Main Header Banner with Unified Design */}
+      <div 
+        className="bg-gradient-to-r from-[#061d43] via-[#0d2e6b] to-[#ff5757]/75 rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden mb-6"
+        id="coverage-control-header-banner"
+      >
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-1.5 max-w-3xl">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-[#ff5757]/15 text-[#ff5757] border border-[#ff5757]/30 rounded-xl backdrop-blur-xs flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                Contrôle de Couverture
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#ff5757]/15 text-[#ff5757] border border-[#ff5757]/30">
+                Conformité des contrats & Plannings
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-200/90 leading-relaxed font-normal">
+              Vérification automatisée de la couverture du planning par un contrat pour HubJob PROVINCE et ORLY.
             </p>
           </div>
           {isReadOnly && (
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 font-black text-xs border border-amber-300 shadow-sm shrink-0 self-start sm:self-auto">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 font-black text-xs border border-amber-300 shadow-sm shrink-0 self-start md:self-auto">
               <span>Mode Consultation (Lecture seule)</span>
             </div>
           )}

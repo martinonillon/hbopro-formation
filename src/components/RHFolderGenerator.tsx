@@ -479,7 +479,7 @@ export default function RHFolderGenerator({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 animate-fade-in" id="rh-folder-generator-view">
+    <div className="w-full space-y-6 pb-28 animate-fade-in" id="rh-folder-generator-view">
       
       {/* Top Header Banner */}
       <div className="bg-gradient-to-r from-[#ff751f] via-[#f4511e] to-[#d84315] rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden">
@@ -704,7 +704,7 @@ export default function RHFolderGenerator({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" id="documents-grid-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5" id="documents-grid-12">
           {DOCUMENT_CARDS.map((docCard) => {
             const Icon = docCard.icon;
             
@@ -902,7 +902,7 @@ export default function RHFolderGenerator({
 
       {/* BOTTOM ACTION BAR */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-3.5 px-4 sm:px-8 z-40 shadow-lg">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
           
           <div className="flex items-center gap-3 text-xs">
             <div className={`w-2.5 h-2.5 rounded-full ${selectedCollaborator ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
