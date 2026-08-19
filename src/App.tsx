@@ -27,13 +27,16 @@ import {
   LogOut,
   User as UserIcon,
   FolderGit2,
-  BookUser
+  BookUser,
+  TrendingUp,
+  FileText
 } from 'lucide-react';
-import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact, RegistrationRequest, DEFAULT_PROVISIONAL_PASSWORD } from './types';
+import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact, RegistrationRequest, DEFAULT_PROVISIONAL_PASSWORD, RecruitmentRecord } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
 import { INITIAL_COLLABORATORS, INITIAL_TRAINING_LOGS } from './data/collaboratorsData';
 import { DEFAULT_ADMIN_USER, INITIAL_USERS, normalizeUserPermissions, DEFAULT_READONLY_PERMISSIONS } from './data/usersData';
 import { DEFAULT_CONTACTS } from './data/defaultContacts';
+import { INITIAL_RECRUITMENTS } from './data/defaultRecruitments';
 import { formatDateDMY, formatDateFR, normalizeDateToISO, parseImportDate } from './utils/dateUtils';
 import { deduplicateTrainingLogs } from './utils/deduplicateLogs';
 import { syncCollection, saveItemToFirestore, deleteItemFromFirestore, saveBulkToFirestore, clearFirestoreCollection } from './lib/firestoreSync';
@@ -44,6 +47,7 @@ import { supabase } from './lib/supabase';
 import HomePortal from './components/HomePortal';
 import Dashboard from './components/Dashboard';
 import CollaboratorsList from './components/CollaboratorsList';
+import RecruitmentApp from './components/RecruitmentApp';
 import TrainingLogs from './components/TrainingLogs';
 import PayrollManagement from './components/PayrollManagement';
 import BillingManagement from './components/BillingManagement';
@@ -57,6 +61,8 @@ import LoginScreen from './components/LoginScreen';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
 import AdminManagement from './components/AdminManagement';
 import ContactsDirectory from './components/ContactsDirectory';
+import Sidebar, { AppNavId } from './components/Sidebar';
+import FormationSubNav from './components/FormationSubNav';
 import { getFormattedBuildDate } from './utils/buildInfo';
 
 export default function App() {
@@ -98,6 +104,49 @@ export default function App() {
   });
   const [isContactsDirectoryOpen, setIsContactsDirectoryOpen] = useState(false);
 
+  // Recrutements & Parcours d'intégration
+  const [recruitments, setRecruitments] = useState<RecruitmentRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('hubstation_recruitments');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn("Erreur lecture hubstation_recruitments localStorage", e);
+    }
+    return INITIAL_RECRUITMENTS;
+  });
+
+  // Sauvegarde automatique des recrutements dans le localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('hubstation_recruitments', JSON.stringify(recruitments));
+    } catch (e) {
+      console.warn("Erreur écriture hubstation_recruitments localStorage", e);
+    }
+  }, [recruitments]);
+
+  // Handlers pour l'application Recrutement
+  const handleAddRecruitment = (recData: Omit<RecruitmentRecord, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newRecord: RecruitmentRecord = {
+      ...recData,
+      id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setRecruitments(prev => [newRecord, ...prev]);
+    addEvent(`Nouvelle fiche de recrutement créée pour ${newRecord.collaboratorName}`, 'success');
+  };
+
+  const handleUpdateRecruitment = (recId: string, updates: Partial<RecruitmentRecord>) => {
+    setRecruitments(prev => prev.map(r => r.id === recId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r));
+  };
+
+  const handleDeleteRecruitment = (recId: string) => {
+    setRecruitments(prev => prev.filter(r => r.id !== recId));
+  };
+
   // Demandes d'inscription (Workflow Première Connexion)
   const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>(() => {
     try {
@@ -131,7 +180,24 @@ export default function App() {
   };
 
   const [events, setEvents] = useState<RealTimeEvent[]>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'collaborators' | 'logs' | 'payroll' | 'billing' | 'catalog' | 'consolidation' | 'calendar' | 'coverageControl' | 'admin' | 'rhGenerator'>('home');
+  const [activeTab, setActiveTab] = useState<
+    | 'home'
+    | 'dashboard'
+    | 'collaborators'
+    | 'logs'
+    | 'payroll'
+    | 'billing'
+    | 'catalog'
+    | 'consolidation'
+    | 'calendar'
+    | 'coverageControl'
+    | 'admin'
+    | 'rhGenerator'
+    | 'recruitment'
+    | 'operationsTracking'
+    | 'absenceTracking'
+    | 'contractGenerator'
+  >('home');
   const [calendarInitialDate, setCalendarInitialDate] = useState<string | null>(null);
   const [calendarInitialNumSession, setCalendarInitialNumSession] = useState<string | null>(null);
   const [selectedCollabId, setSelectedCollabId] = useState<string | null>(null);
@@ -156,19 +222,73 @@ export default function App() {
     document.title = 'HubStation';
   }, []);
 
+  // Active navigation ID for the permanent left sidebar
+  const getActiveNavId = (): AppNavId => {
+    if (activeTab === 'collaborators') return 'baseInterimaires';
+    if (['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'catalog', 'consolidation'].includes(activeTab)) {
+      return 'formation';
+    }
+    if (activeTab === 'coverageControl') return 'coverageControl';
+    if (activeTab === 'rhGenerator') return 'rhGenerator';
+    if (activeTab === 'recruitment') return 'recruitment';
+    if (activeTab === 'admin') return 'admin';
+    if (activeTab === 'operationsTracking') return 'operationsTracking';
+    if (activeTab === 'absenceTracking') return 'absenceTracking';
+    if (activeTab === 'contractGenerator') return 'contractGenerator';
+    return 'home';
+  };
+
+  const handleSelectNav = (navId: AppNavId) => {
+    if (navId === 'home') {
+      setActiveTab('home');
+    } else if (navId === 'formation') {
+      if (['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'catalog', 'consolidation'].includes(activeTab)) {
+        // stay on current formation subtab
+      } else {
+        setActiveTab('dashboard');
+      }
+    } else if (navId === 'baseInterimaires') {
+      setActiveTab('collaborators');
+    } else if (navId === 'recruitment') {
+      setActiveTab('recruitment');
+    } else if (navId === 'coverageControl') {
+      setActiveTab('coverageControl');
+    } else if (navId === 'rhGenerator') {
+      setActiveTab('rhGenerator');
+    } else if (navId === 'admin') {
+      setActiveTab('admin');
+    } else if (navId === 'operationsTracking') {
+      setActiveTab('operationsTracking');
+    } else if (navId === 'absenceTracking') {
+      setActiveTab('absenceTracking');
+    } else if (navId === 'contractGenerator') {
+      setActiveTab('contractGenerator');
+    }
+  };
+
   // Enforce access control and redirection if activeTab is not permitted
   useEffect(() => {
     if (!currentUser) return;
     const perms = normalizeUserPermissions(currentUser.permissions);
-    const formationTabs = ['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'collaborators', 'catalog', 'consolidation'];
+    const formationTabs = ['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'catalog', 'consolidation'];
 
-    if (formationTabs.includes(activeTab) && perms.formation === 'Masquer') {
+    if (activeTab === 'collaborators' && perms.baseInterimaires === 'Masquer') {
+      setActiveTab('home');
+    } else if (formationTabs.includes(activeTab) && perms.formation === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'recruitment' && perms.recruitment === 'Masquer') {
       setActiveTab('home');
     } else if (activeTab === 'coverageControl' && perms.coverageControl === 'Masquer') {
       setActiveTab('home');
     } else if (activeTab === 'rhGenerator' && perms.rhGenerator === 'Masquer') {
       setActiveTab('home');
     } else if (activeTab === 'admin' && perms.admin === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'operationsTracking' && perms.operationsTracking === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'absenceTracking' && perms.absenceTracking === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'contractGenerator' && perms.contractGenerator === 'Masquer') {
       setActiveTab('home');
     }
   }, [currentUser, activeTab]);
@@ -555,7 +675,7 @@ export default function App() {
   }, []);
 
   // Handler: Add Collaborator
-  const handleAddCollaborator = (collabData: Omit<Collaborator, 'id'>) => {
+  const handleAddCollaborator = (collabData: Omit<Collaborator, 'id'>): Collaborator => {
     const newId = 'c' + (collaborators.length + 1);
     const newCollab: Collaborator = {
       ...collabData,
@@ -566,6 +686,7 @@ export default function App() {
     saveItemToFirestore('collaborators', newCollab);
     saveToSupabase('collaborators', newCollab, handleSupabaseWriteError);
     addEvent(`Collaborateur ajouté : ${newCollab.firstName} ${newCollab.lastName} (${newCollab.escale})`, 'success');
+    return newCollab;
   };
 
   const createHistoryEntry = (action: string, author?: string) => {
@@ -1898,9 +2019,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans flex flex-col antialiased text-slate-800">
+    <div className="min-h-screen bg-[#f2f2f2] font-sans flex flex-col antialiased text-slate-800">
       
-      {/* Premium Navigation Header */}
+      {/* Premium Navigation Header with white background */}
       <header className="bg-white border-b border-slate-200 h-16 shrink-0 sticky top-0 z-30 shadow-xs" id="main-app-header">
         <div className="w-full px-4 sm:px-6 h-full flex items-center justify-between">
           
@@ -1960,384 +2081,325 @@ export default function App() {
         </div>
       </header>
 
-      {/* Navigation Tabs Bar */}
-      {(() => {
-        const isFormationMode = ['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'collaborators', 'catalog', 'consolidation'].includes(activeTab);
-        const isCoverageMode = activeTab === 'coverageControl';
-        const isRhGeneratorMode = activeTab === 'rhGenerator';
-        const isAdminMode = activeTab === 'admin';
+      {/* Main Container with Left Sidebar & Content */}
+      <div className="flex-1 flex flex-row w-full bg-[#f2f2f2] min-h-[calc(100vh-4rem)]">
+        
+        {/* Permanent Left Sidebar (#061d43) */}
+        <Sidebar
+          activeNav={getActiveNavId()}
+          onSelectNav={handleSelectNav}
+          permissions={userPerms}
+        />
 
-        return (
-          <nav className="bg-white border-b border-slate-200 sticky top-16 z-20 shadow-xs" id="navigation-tabs-bar">
-            <div className="w-full px-4 sm:px-6">
-              <div className="flex space-x-1 overflow-x-auto py-2 items-center">
-                
-                {/* 1. Bouton Accueil (Toujours visible et accessible universellement) */}
-                <button
-                  onClick={() => setActiveTab('home')}
-                  className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                    activeTab === 'home' 
-                      ? 'bg-[#082C66] text-white shadow-2xs' 
-                      : 'text-slate-700 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                  }`}
-                  id="tab-home"
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 bg-[#f2f2f2]">
+          
+          <main className="flex-1 w-full px-4 sm:px-6 py-6" id="main-content-stage">
+            
+            {/* Secondary Navigation inside Formation application */}
+            {['dashboard', 'calendar', 'logs', 'payroll', 'billing', 'catalog', 'consolidation'].includes(activeTab) && userPerms.formation !== 'Masquer' && (
+              <FormationSubNav
+                activeTab={activeTab}
+                onSelectTab={(tab) => {
+                  if (tab === 'logs') setLogsFilter(null);
+                  setActiveTab(tab);
+                }}
+              />
+            )}
+
+            {/* Render Active Tab */}
+            <div className="animate-fade-in">
+              {/* Nouveau Portail Principal : Accueil */}
+              {activeTab === 'home' && (
+                <HomePortal 
+                  currentUser={currentUser}
+                />
+              )}
+
+              {/* Modules en cours de développement */}
+              {activeTab === 'operationsTracking' && userPerms.operationsTracking !== 'Masquer' && (
+                <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl p-8 border border-slate-200 shadow-xs space-y-5 animate-fade-in" id="view-operations-tracking">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-cyan-50 text-[#00c0f0] border border-cyan-200/80 flex items-center justify-center shrink-0">
+                      <TrendingUp className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900">Suivi d’exploitation</h2>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">Suivi de l'activité par escale et pilotage des KPI opérationnels</p>
+                    </div>
+                  </div>
+                  <div className="py-10 px-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-3">
+                    <p className="text-sm font-bold text-slate-800">Module en cours de développement</p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Ce module permettra d'assurer le suivi détaillé de l'activité par escale ainsi que le pilotage complet des KPI opérationnels.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => setActiveTab('home')}
+                        className="px-4 py-2 bg-[#061d43] hover:bg-[#0a2c66] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+                      >
+                        Retour à l'accueil
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'absenceTracking' && userPerms.absenceTracking !== 'Masquer' && (
+                <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl p-8 border border-slate-200 shadow-xs space-y-5 animate-fade-in" id="view-absence-tracking">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-teal-50 text-[#57aea6] border border-teal-200/80 flex items-center justify-center shrink-0">
+                      <Clock className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900">Absences et retards</h2>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">Suivi des absences, retards et automatisation du mailing associé</p>
+                    </div>
+                  </div>
+                  <div className="py-10 px-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-3">
+                    <p className="text-sm font-bold text-slate-800">Module en cours de développement</p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Ce module permettra d'assurer le suivi complet des absences et retards et de générer automatiquement les communications associées.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => setActiveTab('home')}
+                        className="px-4 py-2 bg-[#061d43] hover:bg-[#0a2c66] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+                      >
+                        Retour à l'accueil
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'contractGenerator' && userPerms.contractGenerator !== 'Masquer' && (
+                <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl p-8 border border-slate-200 shadow-xs space-y-5 animate-fade-in" id="view-contract-generator">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0062ff] border border-blue-200/80 flex items-center justify-center shrink-0">
+                      <FileText className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900">Import contrat</h2>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">Automatisation des imports et conversions contractuelles pour HBO</p>
+                    </div>
+                  </div>
+                  <div className="py-10 px-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-3">
+                    <p className="text-sm font-bold text-slate-800">Module en cours de développement</p>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Ce module permettra de convertir instantanément vos imports de contrats pour HBO.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => setActiveTab('home')}
+                        className="px-4 py-2 bg-[#061d43] hover:bg-[#0a2c66] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+                      >
+                        Retour à l'accueil
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Onglet KPI (App Formation) */}
+              {activeTab === 'dashboard' && userPerms.formation !== 'Masquer' && (
+                <Dashboard 
+                  collaborators={collaborators}
+                  trainingLogs={trainingLogs}
+                  events={events}
+                  onTriggerSimulation={handleTriggerSimulation}
+                  onQuickFixLog={handleQuickFixLog}
+                  onOpenEnrollment={() => setIsEnrollmentOpen(true)}
+                  onNavigateToTab={(tab, filter) => {
+                    if (filter) {
+                      setLogsFilter(filter);
+                    } else {
+                      setLogsFilter(null);
+                    }
+                    setActiveTab(tab as any);
+                  }}
+                  isReadOnly={userPerms.formation === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'collaborators' && userPerms.baseInterimaires !== 'Masquer' && (
+                <CollaboratorsList 
+                  collaborators={collaborators}
+                  trainingLogs={trainingLogs}
+                  modulesCatalog={modulesCatalog}
+                  recruitments={recruitments}
+                  onAddCollaborator={handleAddCollaborator}
+                  onAssignModule={handleAssignModule}
+                  onUpdateTrainingStatus={handleUpdateTrainingStatus}
+                  onDeleteTrainingLog={handleDeleteTrainingLog}
+                  onDeleteCollaborator={handleDeleteCollaborator}
+                  onClearAllCollaborators={handleClearAllCollaborators}
+                  onUpdateCollaborator={handleUpdateCollaborator}
+                  onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
+                  onOpenEnrollment={() => { setEditLog(null); setIsEnrollmentOpen(true); }}
+                  selectedCollabId={selectedCollabId}
+                  onSelectCollabId={setSelectedCollabId}
+                  onNavigateToRecruitment={(collabId) => {
+                    if (collabId) setSelectedCollabId(collabId);
+                    setActiveTab('recruitment');
+                  }}
+                  isReadOnly={userPerms.baseInterimaires === 'Lecture'}
+                />
+              )}
+
+              {/* Application Recrutement & Parcours d'intégration */}
+              {activeTab === 'recruitment' && userPerms.recruitment !== 'Masquer' && (
+                <RecruitmentApp 
+                  collaborators={collaborators}
+                  recruitments={recruitments}
+                  onAddCollaborator={handleAddCollaborator}
+                  onAddRecruitment={handleAddRecruitment}
+                  onUpdateRecruitment={handleUpdateRecruitment}
+                  onDeleteRecruitment={handleDeleteRecruitment}
+                  onViewCollaboratorProfile={(collabId) => {
+                    setSelectedCollabId(collabId);
+                    setActiveTab('collaborators');
+                  }}
+                  isReadOnly={userPerms.recruitment === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'logs' && userPerms.formation !== 'Masquer' && (
+                <TrainingLogs 
+                  trainingLogs={trainingLogs}
+                  onUpdateTrainingStatus={handleUpdateTrainingStatus}
+                  onDeleteTrainingLog={handleDeleteTrainingLog}
+                  onOpenEnrollment={() => { setEditLog(null); setIsEnrollmentOpen(true); }}
+                  onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
+                  initialFilters={logsFilter}
+                  onClearFilters={() => setLogsFilter(null)}
+                  onViewCollaborator={(collabId) => {
+                    setSelectedCollabId(collabId);
+                    setActiveTab('collaborators');
+                  }}
+                  onDeduplicateLogs={handleDeduplicateLogs}
+                  isReadOnly={userPerms.formation === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'payroll' && userPerms.formation !== 'Masquer' && (
+                <PayrollManagement 
+                  trainingLogs={trainingLogs}
+                  collaborators={collaborators}
+                  onUpdateTrainingStatus={handleUpdateTrainingStatus}
+                  onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
+                  onViewCollaborator={(collabId) => {
+                    setSelectedCollabId(collabId);
+                    setActiveTab('collaborators');
+                  }}
+                  isReadOnly={userPerms.formation === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'billing' && userPerms.formation !== 'Masquer' && (
+                <BillingManagement 
+                  trainingLogs={trainingLogs}
+                  collaborators={collaborators}
+                  onUpdateTrainingStatus={handleUpdateTrainingStatus}
+                  onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
+                  onViewCollaborator={(collabId) => {
+                    setSelectedCollabId(collabId);
+                    setActiveTab('collaborators');
+                  }}
+                  isReadOnly={userPerms.formation === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'catalog' && userPerms.formation !== 'Masquer' && (
+                <ModuleCatalog 
+                  modulesCatalog={modulesCatalog}
+                  trainingLogs={trainingLogs}
+                  onAddModule={handleAddModule}
+                  onUpdateModule={handleUpdateModule}
+                  onDeleteModule={handleDeleteModule}
+                  isReadOnly={userPerms.formation === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'consolidation' && (
+                <ConsolidationPanel 
+                  onImportCSV={handleImportCSV}
+                  modulesCatalog={modulesCatalog}
+                  collaborators={collaborators}
+                  trainingLogs={trainingLogs}
+                  contacts={contacts}
+                />
+              )}
+
+              {activeTab === 'calendar' && userPerms.formation !== 'Masquer' && (
+                <CalendarView 
+                  trainingLogs={trainingLogs}
+                  collaborators={collaborators}
+                  modulesCatalog={modulesCatalog}
+                  onOpenEnrollmentOnDate={handleOpenEnrollmentOnDate}
+                  onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
+                  onDeleteLogs={handleDeleteLogs}
+                  onBulkUpdateLogs={handleBulkUpdateLogs}
+                  isReadOnly={userPerms.formation === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'coverageControl' && userPerms.coverageControl !== 'Masquer' && (
+                <CoverageControl 
+                  isReadOnly={userPerms.coverageControl === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'rhGenerator' && userPerms.rhGenerator !== 'Masquer' && (
+                <RHFolderGenerator 
+                  collaborators={collaborators}
+                  onAddCollaborator={handleAddCollaborator}
+                  onBackToHome={() => setActiveTab('home')}
+                  isReadOnly={userPerms.rhGenerator === 'Lecture'}
+                />
+              )}
+
+              {activeTab === 'admin' && userPerms.admin !== 'Masquer' && (
+                <AdminManagement 
+                  users={users}
+                  currentUser={currentUser}
+                  onAddUser={handleAddUser}
+                  onUpdateUser={handleUpdateUser}
+                  onDeleteUser={handleDeleteUser}
+                  registrationRequests={registrationRequests}
+                  onApproveRegistrationRequest={handleApproveRegistrationRequest}
+                  onRejectRegistrationRequest={handleRejectRegistrationRequest}
+                  onSendPasswordResetEmail={handleSendPasswordResetEmail}
+                  currentUserPermission={userPerms.admin}
+                />
+              )}
+            </div>
+
+          </main>
+
+          {/* Footer */}
+          <footer className="bg-white border-t border-slate-200 py-4 shrink-0 mt-auto" id="main-app-footer">
+            <div className="w-full px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-500">
+              <div>
+                © 2026 <strong>Hubjob</strong>.
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="font-medium text-slate-500">{getFormattedBuildDate()}</span>
+                <span>•</span>
+                <button 
+                  onClick={handleOpenConsolidation} 
+                  className="text-[#0062FF] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                  id="footer-launch-consolidation-btn"
                 >
-                  <Home className="h-4 w-4" />
-                  Accueil
+                  <Lock className="h-3 w-3 text-slate-400" />
+                  Lancer la consolidation de production
                 </button>
-
-                {/* 2. Mode "App Formation" */}
-                {isFormationMode && userPerms.formation !== 'Masquer' && (
-                  <>
-                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
-                    
-                    <button
-                      onClick={() => setActiveTab('dashboard')}
-                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                        activeTab === 'dashboard' 
-                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                      }`}
-                      id="tab-dashboard"
-                    >
-                      <LayoutDashboard className="h-4 w-4 text-[#082C66]" />
-                      KPI
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('calendar')}
-                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                        activeTab === 'calendar' 
-                          ? 'bg-[#06b6d4]/10 text-[#00838f] font-bold border border-[#06b6d4]/30 shadow-2xs' 
-                          : 'text-slate-600 hover:text-[#06b6d4] hover:bg-[#06b6d4]/5'
-                      }`}
-                      id="tab-calendar"
-                    >
-                      <Calendar className="h-4 w-4 text-[#06b6d4]" />
-                      Calendrier
-                    </button>
-
-                    <button
-                      onClick={() => { setLogsFilter(null); setActiveTab('logs'); }}
-                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                        activeTab === 'logs' 
-                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                      }`}
-                      id="tab-logs"
-                    >
-                      <FileSpreadsheet className="h-4 w-4 text-[#57aea6]" />
-                      Suivi Général
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('payroll')}
-                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                        activeTab === 'payroll' 
-                          ? 'bg-purple-50 text-purple-900 font-bold border border-purple-200 shadow-2xs' 
-                          : 'text-slate-600 hover:text-purple-600 hover:bg-purple-50/50'
-                      }`}
-                      id="tab-payroll"
-                    >
-                      <CreditCard className="h-4 w-4 text-purple-600" />
-                      Gestion paye
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('billing')}
-                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                        activeTab === 'billing' 
-                          ? 'bg-amber-50 text-amber-900 font-bold border border-amber-200 shadow-2xs' 
-                          : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50/50'
-                      }`}
-                      id="tab-billing"
-                    >
-                      <Receipt className="h-4 w-4 text-amber-600" />
-                      Gestion facturation
-                    </button>
-
-                    <button
-                      onClick={() => { setSelectedCollabId(null); setActiveTab('collaborators'); }}
-                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                        activeTab === 'collaborators' 
-                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                      }`}
-                      id="tab-collaborators"
-                    >
-                      <Users className="h-4 w-4 text-[#0062FF]" />
-                      Intérimaires
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('catalog')}
-                      className={`flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                        activeTab === 'catalog' 
-                          ? 'bg-[#082C66]/5 text-[#082C66] font-bold border border-[#082C66]/10 shadow-2xs' 
-                          : 'text-slate-600 hover:text-[#0062FF] hover:bg-[#0062FF]/5'
-                      }`}
-                      id="tab-catalog"
-                    >
-                      <BookOpen className="h-4 w-4 text-[#ffde59]" />
-                      Catalogue de formation
-                    </button>
-                  </>
-                )}
-
-                {/* 3. Mode "App Contrôle de couverture" */}
-                {isCoverageMode && userPerms.coverageControl !== 'Masquer' && (
-                  <>
-                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
-                    <button
-                      onClick={() => setActiveTab('coverageControl')}
-                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-cyan-50 text-cyan-900 border border-cyan-200 shadow-2xs cursor-pointer"
-                      id="tab-coverage-control"
-                    >
-                      <ShieldCheck className="h-4 w-4 text-cyan-600" />
-                      Contrôle de couverture
-                    </button>
-                  </>
-                )}
-
-                {/* 4. Mode "App Générateur dossier RH" */}
-                {isRhGeneratorMode && userPerms.rhGenerator !== 'Masquer' && (
-                  <>
-                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
-                    <button
-                      onClick={() => setActiveTab('rhGenerator')}
-                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-orange-50 text-[#d84315] border border-orange-200 shadow-2xs cursor-pointer"
-                      id="tab-rh-generator"
-                    >
-                      <FolderGit2 className="h-4 w-4 text-[#ff751f]" />
-                      Générateur dossier RH
-                    </button>
-                  </>
-                )}
-
-                {/* 5. Mode "App Administration" */}
-                {isAdminMode && userPerms.admin !== 'Masquer' && (
-                  <>
-                    <div className="h-4 w-[1px] bg-slate-200 mx-1 shrink-0" />
-                    <button
-                      onClick={() => setActiveTab('admin')}
-                      className="flex items-center gap-2 py-2 px-3.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs cursor-pointer"
-                      id="tab-admin"
-                    >
-                      <Shield className="h-4 w-4 text-indigo-600" />
-                      Admin
-                    </button>
-                  </>
-                )}
-
               </div>
             </div>
-          </nav>
-        );
-      })()}
+          </footer>
 
-      {/* Main content stage */}
-      <main className="flex-1 w-full px-4 sm:px-6 py-6" id="main-content-stage">
-        
-        {/* Render Active Tab */}
-        <div className="animate-fade-in">
-          {/* Nouveau Portail Principal : Accueil */}
-          {activeTab === 'home' && (
-            <HomePortal 
-              currentUser={currentUser}
-              onSelectApp={(app) => {
-                if (app === 'formation') {
-                  setActiveTab('dashboard');
-                } else if (app === 'coverageControl') {
-                  setActiveTab('coverageControl');
-                } else if (app === 'rhGenerator') {
-                  setActiveTab('rhGenerator');
-                } else if (app === 'admin') {
-                  setActiveTab('admin');
-                }
-              }}
-              collaboratorsCount={collaborators.length}
-              trainingLogsCount={trainingLogs.length}
-              pendingRequestsCount={
-                users.filter(u => u.status === 'pending').length +
-                registrationRequests.filter(r => r.status === 'pending' && !users.some(u => (u.email || u.username).toLowerCase() === r.email.toLowerCase())).length
-              }
-            />
-          )}
-
-          {/* Onglet KPI (App Formation) */}
-          {activeTab === 'dashboard' && userPerms.formation !== 'Masquer' && (
-            <Dashboard 
-              collaborators={collaborators}
-              trainingLogs={trainingLogs}
-              events={events}
-              onTriggerSimulation={handleTriggerSimulation}
-              onQuickFixLog={handleQuickFixLog}
-              onOpenEnrollment={() => setIsEnrollmentOpen(true)}
-              onNavigateToTab={(tab, filter) => {
-                if (filter) {
-                  setLogsFilter(filter);
-                } else {
-                  setLogsFilter(null);
-                }
-                setActiveTab(tab as any);
-              }}
-              isReadOnly={userPerms.formation === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'collaborators' && userPerms.formation !== 'Masquer' && (
-            <CollaboratorsList 
-              collaborators={collaborators}
-              trainingLogs={trainingLogs}
-              modulesCatalog={modulesCatalog}
-              onAddCollaborator={handleAddCollaborator}
-              onAssignModule={handleAssignModule}
-              onUpdateTrainingStatus={handleUpdateTrainingStatus}
-              onDeleteTrainingLog={handleDeleteTrainingLog}
-              onDeleteCollaborator={handleDeleteCollaborator}
-              onClearAllCollaborators={handleClearAllCollaborators}
-              onUpdateCollaborator={handleUpdateCollaborator}
-              onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
-              onOpenEnrollment={() => { setEditLog(null); setIsEnrollmentOpen(true); }}
-              selectedCollabId={selectedCollabId}
-              onSelectCollabId={setSelectedCollabId}
-              isReadOnly={userPerms.formation === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'logs' && userPerms.formation !== 'Masquer' && (
-            <TrainingLogs 
-              trainingLogs={trainingLogs}
-              onUpdateTrainingStatus={handleUpdateTrainingStatus}
-              onDeleteTrainingLog={handleDeleteTrainingLog}
-              onOpenEnrollment={() => { setEditLog(null); setIsEnrollmentOpen(true); }}
-              onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
-              initialFilters={logsFilter}
-              onClearFilters={() => setLogsFilter(null)}
-              onViewCollaborator={(collabId) => {
-                setSelectedCollabId(collabId);
-                setActiveTab('collaborators');
-              }}
-              onDeduplicateLogs={handleDeduplicateLogs}
-              isReadOnly={userPerms.formation === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'payroll' && userPerms.formation !== 'Masquer' && (
-            <PayrollManagement 
-              trainingLogs={trainingLogs}
-              collaborators={collaborators}
-              onUpdateTrainingStatus={handleUpdateTrainingStatus}
-              onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
-              onViewCollaborator={(collabId) => {
-                setSelectedCollabId(collabId);
-                setActiveTab('collaborators');
-              }}
-              isReadOnly={userPerms.formation === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'billing' && userPerms.formation !== 'Masquer' && (
-            <BillingManagement 
-              trainingLogs={trainingLogs}
-              collaborators={collaborators}
-              onUpdateTrainingStatus={handleUpdateTrainingStatus}
-              onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
-              onViewCollaborator={(collabId) => {
-                setSelectedCollabId(collabId);
-                setActiveTab('collaborators');
-              }}
-              isReadOnly={userPerms.formation === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'catalog' && userPerms.formation !== 'Masquer' && (
-            <ModuleCatalog 
-              modulesCatalog={modulesCatalog}
-              trainingLogs={trainingLogs}
-              onAddModule={handleAddModule}
-              onUpdateModule={handleUpdateModule}
-              onDeleteModule={handleDeleteModule}
-              isReadOnly={userPerms.formation === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'consolidation' && (
-            <ConsolidationPanel 
-              onImportCSV={handleImportCSV}
-              modulesCatalog={modulesCatalog}
-              collaborators={collaborators}
-              trainingLogs={trainingLogs}
-              contacts={contacts}
-            />
-          )}
-
-          {activeTab === 'calendar' && userPerms.formation !== 'Masquer' && (
-            <CalendarView 
-              trainingLogs={trainingLogs}
-              collaborators={collaborators}
-              modulesCatalog={modulesCatalog}
-              onOpenEnrollmentOnDate={handleOpenEnrollmentOnDate}
-              onEditLog={(log) => { setEditLog(log); setIsEnrollmentOpen(true); }}
-              onDeleteLogs={handleDeleteLogs}
-              onBulkUpdateLogs={handleBulkUpdateLogs}
-              isReadOnly={userPerms.formation === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'coverageControl' && userPerms.coverageControl !== 'Masquer' && (
-            <CoverageControl 
-              isReadOnly={userPerms.coverageControl === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'rhGenerator' && userPerms.rhGenerator !== 'Masquer' && (
-            <RHFolderGenerator 
-              collaborators={collaborators}
-              onAddCollaborator={handleAddCollaborator}
-              onBackToHome={() => setActiveTab('home')}
-              isReadOnly={userPerms.rhGenerator === 'Lecture'}
-            />
-          )}
-
-          {activeTab === 'admin' && userPerms.admin !== 'Masquer' && (
-            <AdminManagement 
-              users={users}
-              currentUser={currentUser}
-              onAddUser={handleAddUser}
-              onUpdateUser={handleUpdateUser}
-              onDeleteUser={handleDeleteUser}
-              registrationRequests={registrationRequests}
-              onApproveRegistrationRequest={handleApproveRegistrationRequest}
-              onRejectRegistrationRequest={handleRejectRegistrationRequest}
-              onSendPasswordResetEmail={handleSendPasswordResetEmail}
-              currentUserPermission={userPerms.admin}
-            />
-          )}
         </div>
-
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-4 shrink-0 mt-auto" id="main-app-footer">
-        <div className="w-full px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-500">
-          <div>
-            © 2026 <strong>Hubjob</strong>.
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="font-medium text-slate-500">{getFormattedBuildDate()}</span>
-            <span>•</span>
-            <button 
-              onClick={handleOpenConsolidation} 
-              className="text-[#0062FF] hover:underline font-bold flex items-center gap-1 cursor-pointer"
-              id="footer-launch-consolidation-btn"
-            >
-              <Lock className="h-3 w-3 text-slate-400" />
-              Lancer la consolidation de production
-            </button>
-          </div>
-        </div>
-      </footer>
+      </div>
 
       {/* Password Protection Modal */}
       {isPasswordModalOpen && (

@@ -6,27 +6,33 @@ import {
   Clock,
   FileText, 
   ShieldCheck, 
-  Shield 
+  Shield,
+  Users,
+  UserCheck
 } from 'lucide-react';
 import React from 'react';
 
 export const ALL_FULL_PERMISSIONS: UserAppPermissions = {
   formation: 'Écriture',
   rhGenerator: 'Écriture',
+  recruitment: 'Écriture',
   operationsTracking: 'Écriture',
   absenceTracking: 'Écriture',
   contractGenerator: 'Écriture',
   coverageControl: 'Écriture',
+  baseInterimaires: 'Écriture',
   admin: 'Écriture',
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserAppPermissions = {
   formation: 'Lecture',
   rhGenerator: 'Lecture',
+  recruitment: 'Lecture',
   operationsTracking: 'Lecture',
   absenceTracking: 'Lecture',
   contractGenerator: 'Lecture',
   coverageControl: 'Lecture',
+  baseInterimaires: 'Lecture',
   admin: 'Masquer',
 };
 
@@ -57,10 +63,12 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
   // Handle migration from previous tab-based permissions if applicable
   const formationCandidate = rawPerms.formation || rawPerms.dashboard || rawPerms.logs || 'Lecture';
   const rhCandidate = rawPerms.rhGenerator || 'Écriture';
+  const recruitmentCandidate = rawPerms.recruitment || 'Écriture';
   const operationsCandidate = rawPerms.operationsTracking || 'Lecture';
   const absenceCandidate = rawPerms.absenceTracking || 'Lecture';
   const contractCandidate = rawPerms.contractGenerator || 'Lecture';
   const coverageCandidate = rawPerms.coverageControl || 'Lecture';
+  const baseInterimairesCandidate = rawPerms.baseInterimaires || rawPerms.collaborators || rawPerms.formation || 'Lecture';
   const adminCandidate = rawPerms.admin || 'Masquer';
 
   const validatePerm = (val: any, fallback: AppPermissionLevel): AppPermissionLevel => {
@@ -71,10 +79,12 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
   return {
     formation: validatePerm(formationCandidate, 'Lecture'),
     rhGenerator: validatePerm(rhCandidate, 'Écriture'),
+    recruitment: validatePerm(recruitmentCandidate, 'Écriture'),
     operationsTracking: validatePerm(operationsCandidate, 'Lecture'),
     absenceTracking: validatePerm(absenceCandidate, 'Lecture'),
     contractGenerator: validatePerm(contractCandidate, 'Lecture'),
     coverageControl: validatePerm(coverageCandidate, 'Lecture'),
+    baseInterimaires: validatePerm(baseInterimairesCandidate, 'Lecture'),
     admin: validatePerm(adminCandidate, 'Masquer'),
   };
 }
@@ -119,8 +129,8 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
     key: 'formation',
     label: 'App Formation',
     subLabel: 'Planifier, suivre les sessions et gérer la paie et la facturation.',
-    description: 'Planifier, suivre les sessions et gérer la paie et la facturation (KPI, Calendrier, Suivi général, Paye, Facturation, Intérimaires et Catalogue).',
-    includedTabs: ['KPI', 'Calendrier', 'Suivi Général', 'Paye', 'Facturation', 'Intérimaires', 'Catalogue'],
+    description: 'Planifier, suivre les sessions et gérer la paie et la facturation (KPI, Calendrier, Suivi général, Paye, Facturation et Catalogue).',
+    includedTabs: ['KPI', 'Calendrier', 'Suivi Général', 'Paye', 'Facturation', 'Catalogue'],
     gradient: 'linear-gradient(135deg, #35ffd0 0%, #0ebfa0 100%)',
     icon: GraduationCap,
   },
@@ -132,6 +142,15 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
     includedTabs: ['12 pièces justificatives', 'Recadrage photo', 'Export ZIP'],
     gradient: 'linear-gradient(135deg, #ff751f 0%, #d84315 100%)',
     icon: FolderGit2,
+  },
+  recruitment: {
+    key: 'recruitment',
+    label: 'App Recrutement & Intégration',
+    subLabel: "Suivi des recrutements en cours et parcours d'intégration.",
+    description: "Suivi des candidats, entretiens, checklist d'intégration en 9 points et archivage automatique en base intérimaires.",
+    includedTabs: ['Recrutements actifs', 'Parcours d’intégration', 'Archivage'],
+    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+    icon: UserCheck,
   },
   operationsTracking: {
     key: 'operationsTracking',
@@ -169,6 +188,15 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
     gradient: 'linear-gradient(135deg, #ff5757 0%, #d32f2f 100%)',
     icon: ShieldCheck,
   },
+  baseInterimaires: {
+    key: 'baseInterimaires',
+    label: 'Base intérimaires',
+    subLabel: 'Gestion du vivier et fiches individuelles des intérimaires.',
+    description: 'Gestion du vivier, fiches d’aptitude, formations et intégration des intérimaires.',
+    includedTabs: ['Vivier intérimaires', 'Fiches agents'],
+    gradient: 'linear-gradient(135deg, #0062ff 0%, #003db3 100%)',
+    icon: Users,
+  },
   admin: {
     key: 'admin',
     label: 'App Administration',
@@ -183,10 +211,12 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
 export const APP_KEYS: AppKey[] = [
   'formation',
   'rhGenerator',
+  'recruitment',
   'operationsTracking',
   'absenceTracking',
   'contractGenerator',
   'coverageControl',
+  'baseInterimaires',
   'admin'
 ];
 

@@ -5,8 +5,11 @@ import {
   MapPin, 
   Briefcase, 
   Mail, 
+  Phone,
   Calendar, 
   ChevronRight, 
+  ChevronDown,
+  ChevronUp,
   Plus, 
   Award, 
   BookOpen, 
@@ -26,9 +29,14 @@ import {
   Edit,
   User,
   Tag,
-  Receipt
+  Receipt,
+  ShieldCheck,
+  CheckSquare,
+  Square,
+  UserCheck,
+  AlertTriangle
 } from 'lucide-react';
-import { Collaborator, TrainingLog, TrainingModule } from '../types';
+import { Collaborator, TrainingLog, TrainingModule, RecruitmentRecord } from '../types';
 import { ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES, RESULTATS, CONSIGNES, getEscaleStyle, getCategoryOfModule, CATEGORY_COLORS } from '../data/modulesData';
 import { formatDateDMY, formatDateFR, normalizeDateToISO } from '../utils/dateUtils';
 
@@ -36,6 +44,7 @@ interface CollaboratorsListProps {
   collaborators: Collaborator[];
   trainingLogs: TrainingLog[];
   modulesCatalog: TrainingModule[];
+  recruitments?: RecruitmentRecord[];
   onAddCollaborator: (collab: Omit<Collaborator, 'id'>) => void;
   onAssignModule: (collabId: string, moduleName: string, formateur: string, type: string, cycle: string, escale: string, service: string) => void;
   onUpdateTrainingStatus: (logId: string, updates: Partial<TrainingLog>) => void;
@@ -45,6 +54,7 @@ interface CollaboratorsListProps {
   onUpdateCollaborator?: (collab: Collaborator) => void;
   onEditLog?: (log: TrainingLog) => void;
   onOpenEnrollment?: () => void;
+  onNavigateToRecruitment?: (collabId?: string) => void;
   selectedCollabId?: string | null;
   onSelectCollabId?: (id: string | null) => void;
   isReadOnly?: boolean;
@@ -54,6 +64,7 @@ export default function CollaboratorsList({
   collaborators,
   trainingLogs,
   modulesCatalog,
+  recruitments = [],
   onAddCollaborator,
   onAssignModule,
   onUpdateTrainingStatus,
@@ -63,6 +74,7 @@ export default function CollaboratorsList({
   onUpdateCollaborator,
   onEditLog,
   onOpenEnrollment,
+  onNavigateToRecruitment,
   selectedCollabId: propSelectedCollabId,
   onSelectCollabId,
   isReadOnly = false
@@ -429,14 +441,194 @@ export default function CollaboratorsList({
     firstName: '',
     lastName: '',
     email: '',
+    phone: '',
     escale: 'BOD',
     service: 'PISTE',
+    poste: '',
+    coefficient: '',
     matricule: ''
   });
 
   // Edit Collab Form modal
   const [isEditCollabOpen, setIsEditCollabOpen] = useState(false);
   const [editCollabData, setEditCollabData] = useState<Collaborator | null>(null);
+
+  // Accordion sections state (closed by default, expanded on demand)
+  const [activeAccordion, setActiveAccordion] = useState<{
+    formation: boolean;
+    absences: boolean;
+    integration: boolean;
+  }>({
+    formation: false,
+    absences: false,
+    integration: false
+  });
+
+  // Whenever user selects another agent, reset the 3 sections to closed
+  useEffect(() => {
+    setActiveAccordion({
+      formation: false,
+      absences: false,
+      integration: false
+    });
+  }, [selectedCollabId]);
+
+  const toggleAccordion = (section: 'formation' | 'absences' | 'integration') => {
+    setActiveAccordion(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // Absences & Retards State
+  interface AbsenceRecord {
+    id: string;
+    collabId: string;
+    type: 'Absence injustifiée' | 'Absence justifiée' | 'Retard' | 'Arrêt maladie' | 'Congé exceptionnel';
+    startDate: string;
+    endDate?: string;
+    duration: string;
+    motif: string;
+    justified: boolean;
+    dateDeclaration: string;
+  }
+
+  const [absences, setAbsences] = useState<AbsenceRecord[]>(() => {
+    const saved = localStorage.getItem('hubstation_collaborator_absences');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return [
+      {
+        id: 'abs-1',
+        collabId: 'c1',
+        type: 'Retard',
+        startDate: '2025-01-14',
+        duration: '25 min',
+        motif: 'Retard transport en commun (RER B)',
+        justified: true,
+        dateDeclaration: '2025-01-14'
+      },
+      {
+        id: 'abs-2',
+        collabId: 'c2',
+        type: 'Arrêt maladie',
+        startDate: '2025-02-03',
+        endDate: '2025-02-05',
+        duration: '3 jours',
+        motif: 'Arrêt médical délivré par médecin',
+        justified: true,
+        dateDeclaration: '2025-02-03'
+      },
+      {
+        id: 'abs-3',
+        collabId: 'c3',
+        type: 'Absence injustifiée',
+        startDate: '2025-01-22',
+        duration: '1 journée',
+        motif: 'Non présentation sans préavis',
+        justified: false,
+        dateDeclaration: '2025-01-22'
+      }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('hubstation_collaborator_absences', JSON.stringify(absences));
+  }, [absences]);
+
+  const [isAddAbsenceOpen, setIsAddAbsenceOpen] = useState(false);
+  const [newAbsenceData, setNewAbsenceData] = useState<{
+    type: AbsenceRecord['type'];
+    startDate: string;
+    endDate: string;
+    duration: string;
+    motif: string;
+    justified: boolean;
+  }>({
+    type: 'Retard',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
+    duration: '15 min',
+    motif: '',
+    justified: true
+  });
+
+  const handleAddAbsence = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCollabId) return;
+    const newRecord: AbsenceRecord = {
+      id: 'abs-' + Date.now(),
+      collabId: selectedCollabId,
+      type: newAbsenceData.type,
+      startDate: newAbsenceData.startDate,
+      endDate: newAbsenceData.endDate || undefined,
+      duration: newAbsenceData.duration || '1 j',
+      motif: newAbsenceData.motif || 'Aucun motif renseigné',
+      justified: newAbsenceData.justified,
+      dateDeclaration: new Date().toISOString().split('T')[0]
+    };
+    setAbsences(prev => [newRecord, ...prev]);
+    setIsAddAbsenceOpen(false);
+    setNewAbsenceData({
+      type: 'Retard',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '',
+      duration: '15 min',
+      motif: '',
+      justified: true
+    });
+  };
+
+  const handleDeleteAbsence = (absId: string) => {
+    setAbsences(prev => prev.filter(a => a.id !== absId));
+  };
+
+  // Suivi d'intégration State
+  interface IntegrationSteps {
+    livretAccueil: boolean;
+    epiComplets: boolean;
+    badgeAeroportuaire: boolean;
+    visiteMedicale: boolean;
+    tuteurDesign: boolean;
+    evalPeriodeEssai: boolean;
+  }
+
+  const [integrationData, setIntegrationData] = useState<Record<string, IntegrationSteps>>(() => {
+    const saved = localStorage.getItem('hubstation_collaborator_integration');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+    }
+    return {
+      c1: { livretAccueil: true, epiComplets: true, badgeAeroportuaire: true, visiteMedicale: true, tuteurDesign: true, evalPeriodeEssai: true },
+      c2: { livretAccueil: true, epiComplets: true, badgeAeroportuaire: true, visiteMedicale: true, tuteurDesign: true, evalPeriodeEssai: false },
+      c3: { livretAccueil: true, epiComplets: true, badgeAeroportuaire: true, visiteMedicale: false, tuteurDesign: false, evalPeriodeEssai: false },
+      c4: { livretAccueil: true, epiComplets: true, badgeAeroportuaire: false, visiteMedicale: false, tuteurDesign: false, evalPeriodeEssai: false },
+      c5: { livretAccueil: true, epiComplets: true, badgeAeroportuaire: true, visiteMedicale: true, tuteurDesign: true, evalPeriodeEssai: true }
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('hubstation_collaborator_integration', JSON.stringify(integrationData));
+  }, [integrationData]);
+
+  const handleToggleIntegrationStep = (collabId: string, stepKey: keyof IntegrationSteps) => {
+    if (isReadOnly) return;
+    setIntegrationData(prev => {
+      const current = prev[collabId] || {
+        livretAccueil: false,
+        epiComplets: false,
+        badgeAeroportuaire: false,
+        visiteMedicale: false,
+        tuteurDesign: false,
+        evalPeriodeEssai: false
+      };
+      return {
+        ...prev,
+        [collabId]: {
+          ...current,
+          [stepKey]: !current[stepKey]
+        }
+      };
+    });
+  };
 
   // Assign Module Form modal
   const [isAssignOpen, setIsAssignOpen] = useState(false);
@@ -547,9 +739,17 @@ export default function CollaboratorsList({
 
   // Filters
   const filteredCollabs = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
     return collabsWithStats.filter(c => {
-      const matchesSearch = `${c.firstName} ${c.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            c.email.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = !term ||
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(term) ||
+        (c.matricule && c.matricule.toLowerCase().includes(term)) ||
+        (c.email && c.email.toLowerCase().includes(term)) ||
+        (c.phone && c.phone.toLowerCase().includes(term)) ||
+        (c.escale && c.escale.toLowerCase().includes(term)) ||
+        (c.service && c.service.toLowerCase().includes(term)) ||
+        (c.poste && c.poste.toLowerCase().includes(term)) ||
+        (c.coefficient && c.coefficient.toLowerCase().includes(term));
       const matchesEscale = selectedEscale === 'ALL' || c.escale === selectedEscale;
       const matchesService = selectedService === 'ALL' || c.service === selectedService;
       return matchesSearch && matchesEscale && matchesService;
@@ -567,27 +767,54 @@ export default function CollaboratorsList({
     return trainingLogs.filter(l => l.collaboratorId === selectedCollabId);
   }, [trainingLogs, selectedCollabId]);
 
+  const selectedCollabAbsences = useMemo(() => {
+    if (!selectedCollabId) return [];
+    return absences.filter(a => a.collabId === selectedCollabId);
+  }, [absences, selectedCollabId]);
+
   // Form Submissions
   const handleCreateCollab = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCollabData.firstName || !newCollabData.lastName || !newCollabData.email || !newCollabData.matricule) return;
-    onAddCollaborator(newCollabData);
+    if (!newCollabData.firstName || !newCollabData.lastName) return;
+    onAddCollaborator({
+      firstName: newCollabData.firstName.trim(),
+      lastName: newCollabData.lastName.trim(),
+      email: newCollabData.email.trim() || `${newCollabData.firstName.charAt(0).toLowerCase()}.${newCollabData.lastName.toLowerCase().replace(/\s+/g, '')}@hubjob.fr`,
+      phone: newCollabData.phone.trim(),
+      escale: newCollabData.escale,
+      service: newCollabData.service,
+      poste: newCollabData.poste.trim(),
+      coefficient: newCollabData.coefficient.trim(),
+      matricule: newCollabData.matricule.trim()
+    });
     setIsNewCollabOpen(false);
     setNewCollabData({
       firstName: '',
       lastName: '',
       email: '',
+      phone: '',
       escale: 'BOD',
       service: 'PISTE',
+      poste: '',
+      coefficient: '',
       matricule: ''
     });
   };
 
   const handleUpdateCollabSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editCollabData || !editCollabData.firstName || !editCollabData.lastName || !editCollabData.email || !editCollabData.matricule) return;
+    if (!editCollabData || !editCollabData.firstName || !editCollabData.lastName) return;
     if (onUpdateCollaborator) {
-      onUpdateCollaborator(editCollabData);
+      onUpdateCollaborator({
+        ...editCollabData,
+        firstName: editCollabData.firstName.trim(),
+        lastName: editCollabData.lastName.trim(),
+        email: editCollabData.email.trim(),
+        phone: editCollabData.phone ? editCollabData.phone.trim() : '',
+        poste: editCollabData.poste ? editCollabData.poste.trim() : '',
+        coefficient: editCollabData.coefficient ? editCollabData.coefficient.trim() : '',
+        matricule: editCollabData.matricule ? editCollabData.matricule.trim() : ''
+      });
     }
     setIsEditCollabOpen(false);
     setEditCollabData(null);
@@ -985,14 +1212,14 @@ export default function CollaboratorsList({
               <div class="logo-sub">Ton allié intérim</div>
             </div>
             <div class="meta-info">
-              <div>Matricule Agent: <strong>${selectedCollab.matricule || 'N/A'}</strong></div>
+              <div>Matricule Anael : <strong>${selectedCollab.matricule || 'N/A'}</strong></div>
               <div>Date d'édition: ${new Date().toLocaleDateString('fr-FR')}</div>
-              <div>Escale principale: ${selectedCollab.escale}</div>
+              <div>Escale: ${selectedCollab.escale}</div>
             </div>
           </div>
 
           <div class="doc-title">
-            Fiche Individuelle de Suivi de Formation & Aptitude
+            Dossier Collaborateur Intérimaire & Aptitude
           </div>
 
           <div class="collab-profile">
@@ -1000,19 +1227,22 @@ export default function CollaboratorsList({
               ${selectedCollab.firstName.charAt(0).toUpperCase()}${selectedCollab.lastName.charAt(0).toUpperCase()}
             </div>
             <div class="collab-details">
-              <div class="item"><span class="label">Nom complet :</span><span class="val">${selectedCollab.lastName.toUpperCase()} ${selectedCollab.firstName}</span></div>
+              <div class="item"><span class="label">Collaborateur :</span><span class="val">${selectedCollab.firstName} ${selectedCollab.lastName.toUpperCase()}</span></div>
+              <div class="item"><span class="label">Matricule Anael :</span><span class="val">${selectedCollab.matricule || 'N/A'}</span></div>
               <div class="item"><span class="label">Email :</span><span class="val">${selectedCollab.email}</span></div>
+              <div class="item"><span class="label">Téléphone :</span><span class="val">${selectedCollab.phone || 'Non renseigné'}</span></div>
               <div class="item"><span class="label">Escale :</span><span class="val">${selectedCollab.escale}</span></div>
-              <div class="item"><span class="label">Service rattaché :</span><span class="val">${selectedCollab.service}</span></div>
-              <div class="item"><span class="label">Matricule :</span><span class="val">${selectedCollab.matricule || 'N/A'}</span></div>
+              <div class="item"><span class="label">Service :</span><span class="val">${selectedCollab.service}</span></div>
+              <div class="item"><span class="label">Poste :</span><span class="val">${selectedCollab.poste || 'Non renseigné'}</span></div>
+              <div class="item"><span class="label">Coefficient :</span><span class="val">${selectedCollab.coefficient || 'Non renseigné'}</span></div>
             </div>
             <div class="kpi-container">
               <div class="kpi-box">
-                <span class="kpi-lbl">Conformité</span>
+                <span class="kpi-lbl">Aptitude</span>
                 <span class="kpi-val compliance">${selectedCollab.complianceRate}%</span>
               </div>
               <div class="kpi-box">
-                <span class="kpi-lbl">Valides</span>
+                <span class="kpi-lbl">Validés</span>
                 <span class="kpi-val">${selectedCollab.completedTrainings}</span>
               </div>
             </div>
@@ -1361,76 +1591,43 @@ export default function CollaboratorsList({
                 <div
                   key={collab.id}
                   onClick={() => setSelectedCollabId(collab.id)}
-                  className={`bg-white border p-4 rounded-xl cursor-pointer transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] relative ${
-                    isSelected ? 'border-blue-500 ring-2 ring-blue-500/10' : 'border-slate-200'
+                  className={`bg-white border p-3 rounded-xl cursor-pointer transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] relative ${
+                    isSelected ? 'border-blue-500 ring-2 ring-blue-500/10 bg-blue-50/20' : 'border-slate-200 hover:border-slate-300'
                   }`}
                   id={`collab-item-${collab.id}`}
                 >
-                  <div className="flex items-center gap-3">
-                    {(() => {
-                      const escStyle = getEscaleStyle(collab.escale);
-                      return (
-                        <div className={`h-10 w-10 rounded-full ${escStyle.bg} ${escStyle.text} border ${escStyle.border} flex items-center justify-center font-bold text-xs shrink-0 shadow-xs`}>
-                          {collab.firstName.charAt(0).toUpperCase()}{collab.lastName.charAt(0).toUpperCase()}
-                        </div>
-                      );
-                    })()}
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-slate-900 truncate">
-                        {collab.firstName} {collab.lastName}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 truncate flex items-center gap-1">
-                        <Mail className="h-3 w-3" /> {collab.email}
-                      </p>
-                    </div>
-                    <ChevronRight className={`h-4 w-4 transition-transform ${
-                      isSelected ? 'text-blue-600 translate-x-1 font-bold' : 'text-slate-300'
-                    }`} />
-                  </div>
-
-                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100 text-[10px]">
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
                       {(() => {
-                        const style = getEscaleStyle(collab.escale);
+                        const escStyle = getEscaleStyle(collab.escale);
                         return (
-                          <span className={`${style.bg} ${style.text} ${style.border} px-1.5 py-0.5 rounded font-mono font-bold border`}>
-                            {collab.escale}
-                          </span>
+                          <div className={`h-10 w-10 rounded-full ${escStyle.bg} ${escStyle.text} border ${escStyle.border} flex items-center justify-center font-bold text-xs shrink-0 shadow-xs`}>
+                            {collab.firstName.charAt(0).toUpperCase()}{collab.lastName.charAt(0).toUpperCase()}
+                          </div>
                         );
                       })()}
-                      <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-100/30">
-                        {collab.service}
-                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-slate-900 truncate">
+                          {collab.firstName} <span className="uppercase">{collab.lastName}</span>
+                        </h4>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {(() => {
+                            const style = getEscaleStyle(collab.escale);
+                            return (
+                              <span className={`${style.bg} ${style.text} ${style.border} px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border`}>
+                                {collab.escale}
+                              </span>
+                            );
+                          })()}
+                          <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
+                            {collab.service}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-400">Taux:</span>
-                      <span className={`font-bold ${
-                        collab.complianceRate >= 80 ? 'text-emerald-600' :
-                        collab.complianceRate >= 50 ? 'text-amber-600' : 'text-slate-500'
-                      }`}>
-                        {collab.complianceRate}%
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Micro Indicators */}
-                  <div className="flex items-center gap-2 mt-2 text-[9px] text-slate-400">
-                    <span className="flex items-center gap-0.5 text-emerald-600 font-semibold">
-                      <Check className="h-2.5 w-2.5" /> {collab.completedTrainings} val.
-                    </span>
-                    <span>•</span>
-                    <span className="flex items-center gap-0.5 text-blue-600 font-semibold">
-                      <Clock className="h-2.5 w-2.5" /> {collab.inProgressTrainings} en cours
-                    </span>
-                    {collab.failedTrainings > 0 && (
-                      <>
-                        <span>•</span>
-                        <span className="flex items-center gap-0.5 text-rose-500 font-bold">
-                          <AlertCircle className="h-2.5 w-2.5" /> {collab.failedTrainings} alertes
-                        </span>
-                      </>
-                    )}
+                    <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${
+                      isSelected ? 'text-blue-600 translate-x-1 font-bold' : 'text-slate-300'
+                    }`} />
                   </div>
                 </div>
               );
@@ -1454,46 +1651,52 @@ export default function CollaboratorsList({
         ) : (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden h-full flex flex-col" id="collab-details-container">
             {/* Details Header */}
-            <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white relative">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-800 p-6 text-white relative">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-4">
                   {(() => {
                     const escStyle = getEscaleStyle(selectedCollab.escale);
                     return (
-                      <div className={`h-16 w-16 rounded-full ${escStyle.bg} ${escStyle.text} border-2 ${escStyle.border} flex items-center justify-center font-bold text-xl shadow-lg shrink-0`}>
+                      <div className={`h-16 w-16 rounded-2xl ${escStyle.bg} ${escStyle.text} border-2 ${escStyle.border} flex items-center justify-center font-black text-xl shadow-lg shrink-0`}>
                         {selectedCollab.firstName.charAt(0).toUpperCase()}{selectedCollab.lastName.charAt(0).toUpperCase()}
                       </div>
                     );
                   })()}
                   <div>
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      {selectedCollab.firstName} {selectedCollab.lastName}
-                    </h3>
-                    <p className="text-xs text-slate-300 flex items-center gap-1.5 mt-1">
-                      <Mail className="h-3.5 w-3.5 text-slate-400" /> {selectedCollab.email}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-xl font-extrabold text-white tracking-tight">
+                        {selectedCollab.firstName} <span className="uppercase">{selectedCollab.lastName}</span>
+                      </h3>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-400/30 text-xs font-mono font-bold">
+                        <Tag className="h-3 w-3 text-blue-400" /> Matricule Anael : {selectedCollab.matricule || 'Non spécifié'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-300 mt-2">
+                      <a 
+                        href={`mailto:${selectedCollab.email}`} 
+                        className="flex items-center gap-1.5 hover:text-white transition-colors"
+                        title="Envoyer un email"
+                      >
+                        <Mail className="h-3.5 w-3.5 text-blue-400" /> {selectedCollab.email}
+                      </a>
+                      <span className="text-slate-500">•</span>
+                      <span className="flex items-center gap-1.5 text-slate-200">
+                        <Phone className="h-3.5 w-3.5 text-emerald-400" /> {selectedCollab.phone || 'Non renseigné'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* KPI stats */}
-                <div className="flex items-center gap-3">
-                  <div className="bg-slate-800/80 border border-slate-700/50 p-2.5 rounded-xl text-center min-w-[75px]">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Taux</span>
-                    <span className="text-lg font-bold text-emerald-400">{selectedCollab.complianceRate}%</span>
-                  </div>
-                  <div className="bg-slate-800/80 border border-slate-700/50 p-2.5 rounded-xl text-center min-w-[75px]">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Validés</span>
-                    <span className="text-lg font-bold text-slate-100">{selectedCollab.completedTrainings}</span>
-                  </div>
-                  
+                {/* Actions Buttons Header */}
+                <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
                   {/* Export PDF Button */}
                   <button
                     onClick={handlePrintCollaboratorProfile}
-                    className="bg-purple-600/20 hover:bg-purple-600 border border-purple-500/30 p-2.5 rounded-xl text-center text-purple-300 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1.5 self-stretch font-bold text-xs"
-                    title="Exporter le dossier complet en PDF"
+                    className="bg-purple-600/20 hover:bg-purple-600 border border-purple-500/40 px-3 py-2 rounded-xl text-center text-purple-300 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1.5 font-bold text-xs shadow-xs"
+                    title="Imprimer / Exporter le dossier complet en PDF"
                   >
-                    <FileDown className="h-5 w-5" />
-                    <span className="hidden lg:inline">Exporter PDF</span>
+                    <FileDown className="h-4 w-4" />
+                    <span className="hidden sm:inline">Exporter PDF</span>
                   </button>
                   
                   {/* Modifier Button */}
@@ -1503,70 +1706,118 @@ export default function CollaboratorsList({
                         setEditCollabData(selectedCollab);
                         setIsEditCollabOpen(true);
                       }}
-                      className="bg-blue-650/10 hover:bg-blue-600 border border-blue-500/30 p-2.5 rounded-xl text-center text-blue-200 hover:text-white transition-all cursor-pointer flex items-center justify-center self-stretch"
-                      title="Modifier cet intérimaire"
+                      className="bg-blue-600/20 hover:bg-blue-600 border border-blue-500/40 px-3 py-2 rounded-xl text-center text-blue-300 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1.5 font-bold text-xs shadow-xs"
+                      title="Modifier les informations de l'intérimaire"
                     >
-                      <Edit className="h-5 w-5" />
+                      <Edit className="h-4 w-4" />
+                      <span className="hidden sm:inline">Modifier</span>
                     </button>
                   )}
 
                   {!isReadOnly && (
                     <button
                       onClick={() => setConfirmDeleteCollabId(selectedCollab.id)}
-                      className="bg-red-650/10 hover:bg-red-600 border border-red-500/30 p-2.5 rounded-xl text-center text-red-200 hover:text-white transition-all cursor-pointer flex items-center justify-center self-stretch"
+                      className="bg-rose-600/20 hover:bg-rose-600 border border-rose-500/40 p-2 rounded-xl text-center text-rose-300 hover:text-white transition-all cursor-pointer flex items-center justify-center shadow-xs"
                       title="Supprimer cet intérimaire"
                     >
-                      <Trash2 className="h-5 w-5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Badges bar */}
-              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-white/10 text-xs">
-                <span className="flex items-center gap-1 text-slate-300">
-                  <MapPin className="h-3.5 w-3.5 text-blue-400" /> Escale : 
+            {/* Sous-bandeau d'informations clés (4 cartes) */}
+            <div className="bg-slate-800/90 border-t border-slate-700/60 p-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-slate-900/70 border border-slate-700/60 rounded-xl p-2.5 flex flex-col justify-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Escale</span>
+                <div className="mt-1 flex items-center gap-1.5">
                   {(() => {
-                    const style = getEscaleStyle(selectedCollab.escale);
+                    const escStyle = getEscaleStyle(selectedCollab.escale);
                     return (
-                      <strong className="font-mono px-2 py-0.5 rounded ml-1 text-white border" style={{ backgroundColor: style.hex + '33', borderColor: style.hex }}>
+                      <span className={`${escStyle.bg} ${escStyle.text} ${escStyle.border} px-2 py-0.5 rounded font-mono font-bold text-xs border`}>
                         {selectedCollab.escale}
-                      </strong>
+                      </span>
                     );
                   })()}
-                </span>
-                <span className="text-white/20 font-light">|</span>
-                <span className="flex items-center gap-1 text-slate-300">
-                  <Briefcase className="h-3.5 w-3.5 text-blue-400" /> Service : 
-                  <strong className="text-white bg-white/10 px-2 py-0.5 rounded ml-1">{selectedCollab.service}</strong>
-                </span>
+                </div>
+              </div>
+              <div className="bg-slate-900/70 border border-slate-700/60 rounded-xl p-2.5 flex flex-col justify-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Service</span>
+                <span className="text-xs font-bold text-white mt-1 truncate">{selectedCollab.service}</span>
+              </div>
+              <div className="bg-slate-900/70 border border-slate-700/60 rounded-xl p-2.5 flex flex-col justify-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Poste</span>
+                <span className="text-xs font-bold text-slate-200 mt-1 truncate">{selectedCollab.poste || 'Non renseigné'}</span>
+              </div>
+              <div className="bg-slate-900/70 border border-slate-700/60 rounded-xl p-2.5 flex flex-col justify-center">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Coefficient</span>
+                <span className="text-xs font-bold text-slate-200 mt-1 font-mono">{selectedCollab.coefficient || 'Non renseigné'}</span>
               </div>
             </div>
 
-            {/* List of training modules */}
-            <div className="p-6 flex-1 overflow-y-auto max-h-[480px]">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <Award className="h-4 w-4 text-blue-600" /> Fiche d'aptitude & Formations rattachées ({selectedCollabLogs.length})
-                </h4>
-                
-                {!isReadOnly && (
-                  <button
-                    onClick={() => onOpenEnrollment ? onOpenEnrollment() : setIsAssignOpen(true)}
-                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all border border-blue-200/40"
-                    id="assign-module-trigger-btn"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Assigner une formation
-                  </button>
-                )}
-              </div>
-
-              {selectedCollabLogs.length === 0 ? (
-                <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 text-xs">
-                  Aucun module n'a été attribué à ce collaborateur pour l'instant. Cliquez sur "Assigner une formation" ci-dessus pour démarrer son parcours de formation.
+            {/* Corps de la fiche : Sections en accordéon repliables */}
+            <div className="p-5 flex-1 overflow-y-auto max-h-[calc(100vh-270px)] space-y-4">
+              
+              {/* ACCORDÉON 1 : Formation */}
+              <div className="border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden">
+                <div 
+                  onClick={() => toggleAccordion('formation')}
+                  className="bg-slate-50 hover:bg-slate-100/80 p-4 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-200/80"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-blue-100/80 text-blue-700">
+                      <Award className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-850 text-sm flex items-center gap-2">
+                        1. Parcours de Formation & Aptitude
+                        <span className="text-xs font-medium text-slate-500">({selectedCollabLogs.length} modules)</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Suivi des habilitations, conformité réglementaire et émargements</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-2">
+                      <span className="text-xs text-slate-500 font-medium">Aptitude :</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
+                        selectedCollab.complianceRate >= 80 ? 'bg-emerald-100 text-emerald-800' :
+                        selectedCollab.complianceRate >= 50 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {selectedCollab.complianceRate}%
+                      </span>
+                    </div>
+                    {!isReadOnly && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenEnrollment) {
+                            onOpenEnrollment();
+                          } else {
+                            setIsAssignOpen(true);
+                          }
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Assigner
+                      </button>
+                    )}
+                    {activeAccordion.formation ? (
+                      <ChevronUp className="h-4 w-4 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-3">
+
+                {activeAccordion.formation && (
+                  <div className="p-4 space-y-3">
+                    {selectedCollabLogs.length === 0 ? (
+                      <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 text-xs">
+                        Aucun module n'a été attribué à ce collaborateur pour l'instant. Cliquez sur "Assigner" ci-dessus pour lui affecter une session de formation.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
                   {selectedCollabLogs.map((log) => {
                     const isEditing = editingLogId === log.id;
                     const mod = modulesCatalog.find(m => m.name === log.moduleName);
@@ -1887,6 +2138,229 @@ export default function CollaboratorsList({
                   })}
                 </div>
               )}
+                  </div>
+                )}
+              </div>
+
+              {/* ACCORDÉON 2 : Absences / Retards */}
+              <div className="border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden">
+                <div 
+                  onClick={() => toggleAccordion('absences')}
+                  className="bg-slate-50 hover:bg-slate-100/80 p-4 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-200/80"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-amber-100/80 text-amber-700">
+                      <Clock className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-850 text-sm flex items-center gap-2">
+                        2. Suivi des Absences & Retards
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          Prochainement
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Historique des retards, arrêts maladie et justificatifs</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {activeAccordion.absences ? (
+                      <ChevronUp className="h-4 w-4 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    )}
+                  </div>
+                </div>
+
+                {activeAccordion.absences && (
+                  <div className="p-8 text-center bg-slate-50/40">
+                    <div className="inline-flex items-center justify-center p-3 rounded-full bg-amber-100/80 text-amber-700 mb-3">
+                      <Clock className="h-6 w-6" />
+                    </div>
+                    <h5 className="text-sm font-bold text-slate-800">Suivi des Absences & Retards</h5>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                      Cette fonctionnalité est actuellement en cours de développement.
+                    </p>
+                    <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-[11px] font-semibold text-amber-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                      Prochainement
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ACCORDÉON 3 : Suivi d'intégration */}
+              {(() => {
+                const collabRecruitments = recruitments.filter(r => r.collaboratorId === selectedCollab.id);
+                const hasArchivedOrActive = collabRecruitments.length > 0;
+                const latestRec = collabRecruitments[collabRecruitments.length - 1];
+
+                return (
+                  <div className="border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden">
+                    <div 
+                      onClick={() => toggleAccordion('integration')}
+                      className="bg-slate-50 hover:bg-slate-100/80 p-4 cursor-pointer flex items-center justify-between transition-colors border-b border-slate-200/80"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-purple-100/80 text-purple-700">
+                          <UserCheck className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-850 text-sm flex items-center gap-2">
+                            3. Parcours d'Accueil & Suivi d'Intégration
+                            {hasArchivedOrActive ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                latestRec.status === 'mise_en_poste' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                latestRec.status === 'annule' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                                'bg-amber-100 text-amber-800 border border-amber-200'
+                              }`}>
+                                {latestRec.status === 'mise_en_poste' ? 'Mise en poste validée' :
+                                 latestRec.status === 'annule' ? 'Recrutement Annulé' :
+                                 'En cours de recrutement'}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                Aucun dossier
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[11px] text-slate-500 mt-0.5">Checklist de conformité RH, intégration en 9 points et archivage</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {activeAccordion.integration ? (
+                          <ChevronUp className="h-4 w-4 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-slate-400" />
+                        )}
+                      </div>
+                    </div>
+
+                    {activeAccordion.integration && (
+                      <div className="p-5 space-y-4 bg-slate-50/40">
+                        {hasArchivedOrActive ? (
+                          collabRecruitments.map((rec, idx) => {
+                            const isMiseEnPoste = rec.status === 'mise_en_poste';
+                            const isAnnule = rec.status === 'annule';
+
+                            const checklistItems: Array<{ key: keyof typeof rec.checklist; label: string }> = [
+                              { key: 'vehicule', label: 'Véhicule' },
+                              { key: 'horaireDecale', label: 'Horaire décalé' },
+                              { key: 'controleDossierFormation', label: 'Contrôle dossier formation' },
+                              { key: 'mailInscription', label: "Mail d'inscription" },
+                              { key: 'ficheHbo', label: 'Fiche HBO' },
+                              { key: 'fichePlanete', label: 'Fiche Planète' },
+                              { key: 'demandeTca', label: 'Demande TCA' },
+                              { key: 'commandeFormation', label: 'Commande formation' },
+                              { key: 'envoiLivretAccueil', label: "Envoi livret d'accueil" },
+                            ];
+
+                            return (
+                              <div key={rec.id || idx} className="bg-white rounded-xl border border-slate-200 p-4 space-y-4 shadow-2xs">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                  <div className="flex items-center gap-2.5">
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                      isMiseEnPoste ? 'bg-emerald-100 text-emerald-800' :
+                                      isAnnule ? 'bg-rose-100 text-rose-800' :
+                                      'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {isMiseEnPoste ? '🟢 Mise en poste validée' : isAnnule ? '🔴 Recrutement Annulé' : '🟠 Recrutement en cours'}
+                                    </span>
+                                    {rec.archivedAt && (
+                                      <span className="text-[11px] text-slate-400">
+                                        Archivé le {formatDateDMY(rec.archivedAt)}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {onNavigateToRecruitment && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onNavigateToRecruitment(selectedCollab.id)}
+                                      className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 self-start sm:self-auto"
+                                    >
+                                      <span>Voir dans Recrutement</span>
+                                      <ExternalLink className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Recruteur</span>
+                                    <span className="font-semibold text-slate-800">{rec.recruteur || 'Non renseigné'}</span>
+                                  </div>
+                                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Date entretien</span>
+                                    <span className="font-semibold text-slate-800">{formatDateDMY(rec.dateEntretien)}</span>
+                                  </div>
+                                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Intégration prévue</span>
+                                    <span className="font-semibold text-slate-800">{formatDateDMY(rec.dateIntegrationPrevue)}</span>
+                                  </div>
+                                </div>
+
+                                {/* Checklist 9 points */}
+                                <div className="space-y-2">
+                                  <span className="text-[11px] font-bold text-slate-600 block uppercase tracking-wider">
+                                    Contrôles d'intégration & Conformité (9 points)
+                                  </span>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                    {checklistItems.map(item => {
+                                      const val = rec.checklist[item.key] || 'N/A';
+                                      return (
+                                        <div key={item.key} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-200/70 text-xs">
+                                          <span className="text-slate-700 font-medium text-[11px] truncate">{item.label}</span>
+                                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                                            val === 'Oui' ? 'bg-emerald-600 text-white' :
+                                            val === 'Non' ? 'bg-rose-600 text-white' :
+                                            'bg-slate-300 text-slate-800'
+                                          }`}>
+                                            {val}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                {rec.commentaires && (
+                                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-700">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Notes & Observations</span>
+                                    <p className="italic">« {rec.commentaires} »</p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="p-8 text-center bg-white rounded-xl border border-dashed border-slate-200 space-y-3">
+                            <div className="inline-flex items-center justify-center p-3 rounded-full bg-purple-50 text-purple-600">
+                              <UserCheck className="h-6 w-6" />
+                            </div>
+                            <div className="space-y-1">
+                              <h5 className="text-sm font-bold text-slate-800">Aucun dossier de recrutement archivé</h5>
+                              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                                Ce collaborateur n'a pas encore de parcours d'accueil ou de recrutement consigné.
+                              </p>
+                            </div>
+                            {onNavigateToRecruitment && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigateToRecruitment(selectedCollab.id)}
+                                className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-lg transition-colors shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                <span>Initier dans Recrutement</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
             </div>
           </div>
         )}
@@ -1894,21 +2368,25 @@ export default function CollaboratorsList({
 
       {/* MODAL: New Collaborator Form */}
       {isNewCollabOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-start justify-center p-4 pt-8 sm:pt-12 z-50 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-scale-up my-auto sm:my-0">
             <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
-              <h4 className="font-bold text-sm">Ajouter un nouveau collaborateur</h4>
-              <button onClick={() => setIsNewCollabOpen(false)} className="text-slate-400 hover:text-white">
+              <div>
+                <h4 className="font-bold text-sm">Ajouter un nouveau collaborateur intérimaire</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Renseignez les informations d'identification et d'affectation</p>
+              </div>
+              <button onClick={() => setIsNewCollabOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <form onSubmit={handleCreateCollab} className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-600">Prénom *</label>
                   <input
                     required
                     type="text"
+                    placeholder="Ex: Thomas"
                     value={newCollabData.firstName}
                     onChange={(e) => setNewCollabData(prev => ({ ...prev, firstName: e.target.value }))}
                     className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
@@ -1919,6 +2397,7 @@ export default function CollaboratorsList({
                   <input
                     required
                     type="text"
+                    placeholder="Ex: Martin"
                     value={newCollabData.lastName}
                     onChange={(e) => setNewCollabData(prev => ({ ...prev, lastName: e.target.value }))}
                     className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
@@ -1927,29 +2406,41 @@ export default function CollaboratorsList({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Matricule *</label>
+                <label className="text-xs font-semibold text-slate-600">Matricule Anael *</label>
                 <input
                   required
                   type="text"
-                  placeholder="Ex: M123456"
+                  placeholder="Ex: ANAEL-88492"
                   value={newCollabData.matricule}
                   onChange={(e) => setNewCollabData(prev => ({ ...prev, matricule: e.target.value }))}
                   className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50 font-mono font-bold"
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-600">Email professionnel *</label>
-                <input
-                  required
-                  type="email"
-                  value={newCollabData.email}
-                  onChange={(e) => setNewCollabData(prev => ({ ...prev, email: e.target.value }))}
-                  className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">E-mail</label>
+                  <input
+                    type="email"
+                    placeholder="t.martin@hubjob.fr"
+                    value={newCollabData.email}
+                    onChange={(e) => setNewCollabData(prev => ({ ...prev, email: e.target.value }))}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">Numéro de téléphone</label>
+                  <input
+                    type="tel"
+                    placeholder="06 12 34 56 78"
+                    value={newCollabData.phone}
+                    onChange={(e) => setNewCollabData(prev => ({ ...prev, phone: e.target.value }))}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-600">Escale d'affectation</label>
                   <select
@@ -1976,17 +2467,40 @@ export default function CollaboratorsList({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">Poste</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Agent de piste, Bagagiste..."
+                    value={newCollabData.poste}
+                    onChange={(e) => setNewCollabData(prev => ({ ...prev, poste: e.target.value }))}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">Coefficient</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 195, 215..."
+                    value={newCollabData.coefficient}
+                    onChange={(e) => setNewCollabData(prev => ({ ...prev, coefficient: e.target.value }))}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsNewCollabOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-all"
+                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-all cursor-pointer"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs"
                 >
                   Ajouter le collaborateur
                 </button>
@@ -1998,16 +2512,19 @@ export default function CollaboratorsList({
 
       {/* MODAL: Edit Collaborator Form */}
       {isEditCollabOpen && editCollabData && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-start justify-center p-4 pt-8 sm:pt-12 z-50 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-scale-up my-auto sm:my-0">
             <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
-              <h4 className="font-bold text-sm">Modifier les informations de l'intérimaire</h4>
-              <button onClick={() => setIsEditCollabOpen(false)} className="text-slate-400 hover:text-white">
+              <div>
+                <h4 className="font-bold text-sm">Modifier les informations de l'intérimaire</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Mise à jour des données profil et d'affectation</p>
+              </div>
+              <button onClick={() => setIsEditCollabOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <form onSubmit={handleUpdateCollabSubmit} className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-600">Prénom *</label>
                   <input
@@ -2031,29 +2548,40 @@ export default function CollaboratorsList({
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-600">Matricule *</label>
+                <label className="text-xs font-semibold text-slate-600">Matricule Anael *</label>
                 <input
                   required
                   type="text"
-                  placeholder="Ex: M123456"
+                  placeholder="Ex: ANAEL-88492"
                   value={editCollabData.matricule || ''}
                   onChange={(e) => setEditCollabData(prev => prev ? ({ ...prev, matricule: e.target.value }) : null)}
                   className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50 font-mono font-bold"
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-600">Email professionnel *</label>
-                <input
-                  required
-                  type="email"
-                  value={editCollabData.email}
-                  onChange={(e) => setEditCollabData(prev => prev ? ({ ...prev, email: e.target.value }) : null)}
-                  className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">E-mail</label>
+                  <input
+                    type="email"
+                    value={editCollabData.email}
+                    onChange={(e) => setEditCollabData(prev => prev ? ({ ...prev, email: e.target.value }) : null)}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">Numéro de téléphone</label>
+                  <input
+                    type="tel"
+                    placeholder="06 12 34 56 78"
+                    value={editCollabData.phone || ''}
+                    onChange={(e) => setEditCollabData(prev => prev ? ({ ...prev, phone: e.target.value }) : null)}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-600">Escale d'affectation</label>
                   <select
@@ -2080,17 +2608,40 @@ export default function CollaboratorsList({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">Poste</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Agent de piste, Bagagiste..."
+                    value={editCollabData.poste || ''}
+                    onChange={(e) => setEditCollabData(prev => prev ? ({ ...prev, poste: e.target.value }) : null)}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600">Coefficient</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 195, 215..."
+                    value={editCollabData.coefficient || ''}
+                    onChange={(e) => setEditCollabData(prev => prev ? ({ ...prev, coefficient: e.target.value }) : null)}
+                    className="mt-1 block w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-50/50"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsEditCollabOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-all"
+                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-all cursor-pointer"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs"
                 >
                   Enregistrer les modifications
                 </button>

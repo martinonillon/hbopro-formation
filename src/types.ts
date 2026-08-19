@@ -22,8 +22,10 @@ export interface Collaborator {
   service: string; // PISTE, PASSAGE, TRAFIC, etc.
   avatar?: string;
   hireDate?: string;
-  matricule?: string; // Matricule de l'agent
+  matricule?: string; // Matricule Anael de l'agent
   phone?: string;     // Numéro de téléphone de l'agent
+  poste?: string;     // Poste / Métier (texte libre)
+  coefficient?: string; // Coefficient (texte libre)
 }
 
 export interface HistoryEntry {
@@ -85,16 +87,59 @@ export type AppPermissionLevel = 'Masquer' | 'Lecture' | 'Écriture';
 // Alias for backwards compatibility
 export type TabPermission = AppPermissionLevel;
 
-export type AppKey = 'formation' | 'rhGenerator' | 'operationsTracking' | 'absenceTracking' | 'contractGenerator' | 'coverageControl' | 'admin';
+export type AppKey = 
+  | 'formation' 
+  | 'rhGenerator' 
+  | 'recruitment'
+  | 'operationsTracking' 
+  | 'absenceTracking' 
+  | 'contractGenerator' 
+  | 'coverageControl' 
+  | 'baseInterimaires' 
+  | 'admin';
 
 export interface UserAppPermissions {
-  formation: AppPermissionLevel;          // 1. App Formation (KPI, Calendrier, Suivi Général, Paye, Facturation, Intérimaires, Catalogue)
+  formation: AppPermissionLevel;          // 1. App Formation (KPI, Calendrier, Suivi Général, Paye, Facturation, Catalogue)
   rhGenerator: AppPermissionLevel;        // 2. App Générateur dossier RH
-  operationsTracking: AppPermissionLevel; // 3. App Suivi d'exploitation (À venir - #082c66)
-  absenceTracking: AppPermissionLevel;    // 4. App Suivi des absences (À venir - #57aea6)
-  contractGenerator: AppPermissionLevel;  // 5. App Générateur import contrat (À venir - #0062ff)
-  coverageControl: AppPermissionLevel;    // 6. App Contrôle de couverture (#ff5757)
-  admin: AppPermissionLevel;              // 7. App Administration (#6d72db)
+  recruitment?: AppPermissionLevel;       // 3. App Recrutement & Intégration
+  operationsTracking: AppPermissionLevel; // 4. App Suivi d'exploitation
+  absenceTracking: AppPermissionLevel;    // 5. App Suivi des absences
+  contractGenerator: AppPermissionLevel;  // 6. App Générateur import contrat
+  coverageControl: AppPermissionLevel;    // 7. App Contrôle de couverture
+  baseInterimaires?: AppPermissionLevel;  // 8. Base intérimaires
+  admin: AppPermissionLevel;              // 9. App Administration
+}
+
+// Types pour l'application Recrutement & Parcours d'accueil
+export type IntegrationChecklistValue = 'Oui' | 'Non' | 'N/A';
+
+export interface RecruitmentChecklist {
+  vehicule: IntegrationChecklistValue;
+  horaireDecale: IntegrationChecklistValue;
+  controleDossierFormation: IntegrationChecklistValue;
+  mailInscription: IntegrationChecklistValue;
+  ficheHbo: IntegrationChecklistValue;
+  fichePlanete: IntegrationChecklistValue;
+  demandeTca: IntegrationChecklistValue;
+  commandeFormation: IntegrationChecklistValue;
+  envoiLivretAccueil: IntegrationChecklistValue;
+}
+
+export type RecruitmentStatus = 'en_cours' | 'mise_en_poste' | 'annule';
+
+export interface RecruitmentRecord {
+  id: string;
+  collaboratorId: string;
+  collaboratorName?: string;
+  recruteur: string;
+  dateEntretien: string;
+  dateIntegrationPrevue: string;
+  checklist: RecruitmentChecklist;
+  commentaires: string;
+  status: RecruitmentStatus;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
 }
 
 // Alias for UserAppPermissions
