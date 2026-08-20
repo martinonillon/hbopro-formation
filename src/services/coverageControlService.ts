@@ -103,9 +103,21 @@ export function readFileToRows(buffer: Buffer | Uint8Array | ArrayBuffer, skipRo
   const workbook = XLSX.read(buffer, { type: 'array', raw: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const options: any = { defval: null, raw: true };
+
+  if (sheet && sheet['!ref']) {
+    try {
+      const decoded = XLSX.utils.decode_range(sheet['!ref']);
+      decoded.s.r = 0; // Force à démarrer à la ligne absolue 1 (index 0)
+      sheet['!ref'] = XLSX.utils.encode_range(decoded);
+    } catch (e) {
+      // Ignorer en cas d'erreur de parsing du ref
+    }
+  }
+
   if (skipRows !== undefined && skipRows > 0) {
     options.range = skipRows;
   }
+
   return XLSX.utils.sheet_to_json(sheet, options);
 }
 
@@ -128,6 +140,32 @@ export function formatExcelTime(val: any): string {
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   }
   return String(val).trim();
+}
+
+/**
+ * Extrait les plages d'heures depuis la colonne "Vacations".
+ * Format attendu : "04:30 - 11:00 (06:30)"
+ * Gère également les vacations multiples séparées par des retours à la ligne ou des virgules.
+ */
+export function parseVacations(val: any): { debut: string; fin: string }[] {
+  if (val === null || val === undefined || val === "") {
+    return [];
+  }
+  const s = String(val).trim();
+  const parts = s.split(/[\r\n,;]+/).map(p => p.trim()).filter(Boolean);
+  const results: { debut: string; fin: string }[] = [];
+  const regex = /(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/;
+
+  for (const part of parts) {
+    const match = part.match(regex);
+    if (match) {
+      results.push({
+        debut: match[1],
+        fin: match[2]
+      });
+    }
+  }
+  return results;
 }
 
 export interface Anomaly {
@@ -204,21 +242,40 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
 
   // ---- Préparation du planning ----
   let nbSansMatricule = 0;
-  const planning = rowsP.map(r => {
+  const planning: any[] = [];
+  for (const r of rowsP) {
     const mat = extractMatFromAgent(r[colPAgent]);
     if (mat === "") nbSansMatricule++;
-    return {
-      mat,
-      dateVac: parseDate(r[colPDate]),
-      agent: r[colPAgent] ?? "",
-      lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
-      motif: r['motif'] ?? "",
-      client: r['activité'] ?? r['activite'] ?? "",
-      remplacementDe: r['remplacement de'] ?? "",
-      debut: formatExcelTime(r['début'] ?? r['debut']),
-      fin: formatExcelTime(r['fin']),
-    };
-  });
+    const vStr = r['vacations'] ?? "";
+    const vacs = parseVacations(vStr);
+    if (vacs.length > 0) {
+      for (const vac of vacs) {
+        planning.push({
+          mat,
+          dateVac: parseDate(r[colPDate]),
+          agent: r[colPAgent] ?? "",
+          lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
+          motif: r['motif'] ?? "",
+          client: r['activité'] ?? r['activite'] ?? "",
+          remplacementDe: r['remplacement de'] ?? "",
+          debut: vac.debut,
+          fin: vac.fin,
+        });
+      }
+    } else {
+      planning.push({
+        mat,
+        dateVac: parseDate(r[colPDate]),
+        agent: r[colPAgent] ?? "",
+        lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
+        motif: r['motif'] ?? "",
+        client: r['activité'] ?? r['activite'] ?? "",
+        remplacementDe: r['remplacement de'] ?? "",
+        debut: "",
+        fin: "",
+      });
+    }
+  }
 
   if (nbSansMatricule > 0) {
     warnings.push(`⚠️ ${nbSansMatricule} ligne(s) du planning n'ont pas de matricule extractible dans la colonne Agent (format attendu : 'NOM (00000)') et ont été ignorées du contrôle.`);
@@ -323,21 +380,40 @@ export function controleCouvertureProvince(bufferContrats: Buffer | Uint8Array, 
 
   // ---- Préparation du planning ----
   let nbSansMatricule = 0;
-  const planning = rowsP.map(r => {
+  const planning: any[] = [];
+  for (const r of rowsP) {
     const mat = extractMatFromAgentProvince(r[colPAgent]);
     if (mat === "") nbSansMatricule++;
-    return {
-      mat,
-      dateVac: parseDate(r[colPDate]),
-      agent: r[colPAgent] ?? "",
-      lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
-      motif: r['motif'] ?? "",
-      client: r['activité'] ?? r['activite'] ?? "",
-      remplacementDe: r['remplacement de'] ?? "",
-      debut: formatExcelTime(r['début'] ?? r['debut']),
-      fin: formatExcelTime(r['fin']),
-    };
-  });
+    const vStr = r['vacations'] ?? "";
+    const vacs = parseVacations(vStr);
+    if (vacs.length > 0) {
+      for (const vac of vacs) {
+        planning.push({
+          mat,
+          dateVac: parseDate(r[colPDate]),
+          agent: r[colPAgent] ?? "",
+          lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
+          motif: r['motif'] ?? "",
+          client: r['activité'] ?? r['activite'] ?? "",
+          remplacementDe: r['remplacement de'] ?? "",
+          debut: vac.debut,
+          fin: vac.fin,
+        });
+      }
+    } else {
+      planning.push({
+        mat,
+        dateVac: parseDate(r[colPDate]),
+        agent: r[colPAgent] ?? "",
+        lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
+        motif: r['motif'] ?? "",
+        client: r['activité'] ?? r['activite'] ?? "",
+        remplacementDe: r['remplacement de'] ?? "",
+        debut: "",
+        fin: "",
+      });
+    }
+  }
 
   if (nbSansMatricule > 0) {
     warnings.push(`⚠️ ${nbSansMatricule} ligne(s) du planning n'ont pas de matricule extractible dans la colonne Agent (format attendu : 'NOM (000000000)') et ont été ignorées du contrôle.`);
