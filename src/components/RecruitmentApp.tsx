@@ -30,7 +30,8 @@ import {
   Sparkles,
   ChevronRight,
   RotateCw,
-  Paperclip
+  Paperclip,
+  Info
 } from 'lucide-react';
 import { 
   Collaborator, 
@@ -54,6 +55,7 @@ interface RecruitmentAppProps {
   onUpdateCollaborator?: (collab: Collaborator) => void;
   onViewCollaboratorProfile?: (collabId: string) => void;
   isReadOnly?: boolean;
+  onOpenModeOp?: () => void;
 }
 
 const ENTRETIEN_FIELDS: Array<{
@@ -93,7 +95,8 @@ export default function RecruitmentApp({
   onDeleteRecruitment,
   onUpdateCollaborator,
   onViewCollaboratorProfile,
-  isReadOnly = false
+  isReadOnly = false,
+  onOpenModeOp
 }: RecruitmentAppProps) {
   // Tabs: 'active' (En cours) or 'archived' (Mise en poste / Annulés)
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
@@ -792,41 +795,61 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
         id="recruitment-header-banner"
       >
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-          <div className="space-y-1.5 max-w-2xl">
+        
+        <div className="relative z-10 space-y-4">
+          {/* Top Line: Title & Mode Op button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
               <div className="p-2.5 bg-purple-500/20 text-purple-300 border border-purple-400/30 rounded-xl backdrop-blur-xs flex items-center justify-center">
                 <UserCheck className="w-6 h-6" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                Recrutement
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-200 border border-purple-400/30">
-                Parcours d'intégration
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                  Recrutement
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-200 border border-purple-400/30">
+                  Parcours d'intégration
+                </span>
+              </div>
             </div>
-            <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed font-normal">
-              Pilotez les recrutements actifs, validez chaque étape d'intégration en 10 points et archivez automatiquement les parcours d'accueil dans la Base Intérimaires.
-            </p>
+
+            <button
+              type="button"
+              onClick={onOpenModeOp}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 hover:border-white/30 backdrop-blur-xs transition-all shadow-sm cursor-pointer self-start sm:self-auto shrink-0"
+              id="recruitment-mode-op-btn"
+            >
+              <Info className="w-3.5 h-3.5 text-white" />
+              <span>Mode Op</span>
+            </button>
           </div>
 
-          {/* Quick Metrics Pills */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center">
-              <span className="text-[10px] uppercase font-bold text-amber-300 block">En cours</span>
-              <span className="text-lg font-black text-white">{activeRecruitments.length}</span>
+          {/* Bottom Line: Description & Quick Metrics */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-center">
+            <div className="lg:col-span-7">
+              <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed font-normal">
+                Pilotez les recrutements actifs, validez chaque étape d'intégration en 10 points et archivez automatiquement les parcours d'accueil dans la Base Intérimaires.
+              </p>
             </div>
-            <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center">
-              <span className="text-[10px] uppercase font-bold text-emerald-300 block">Mise en poste</span>
-              <span className="text-lg font-black text-white">
-                {recruitments.filter(r => r.status === 'mise_en_poste').length}
-              </span>
-            </div>
-            <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center">
-              <span className="text-[10px] uppercase font-bold text-rose-300 block">Annulés</span>
-              <span className="text-lg font-black text-white">
-                {recruitments.filter(r => r.status === 'annule').length}
-              </span>
+            <div className="lg:col-span-5 flex justify-start lg:justify-end">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center min-w-[80px]">
+                  <span className="text-[10px] uppercase font-bold text-amber-300 block">En cours</span>
+                  <span className="text-lg font-black text-white">{activeRecruitments.length}</span>
+                </div>
+                <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center min-w-[80px]">
+                  <span className="text-[10px] uppercase font-bold text-emerald-300 block">Mise en poste</span>
+                  <span className="text-lg font-black text-white">
+                    {recruitments.filter(r => r.status === 'mise_en_poste').length}
+                  </span>
+                </div>
+                <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center min-w-[80px]">
+                  <span className="text-[10px] uppercase font-bold text-rose-300 block">Annulés</span>
+                  <span className="text-lg font-black text-white">
+                    {recruitments.filter(r => r.status === 'annule').length}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

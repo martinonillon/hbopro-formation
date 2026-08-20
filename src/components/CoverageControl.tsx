@@ -38,9 +38,10 @@ Fichiers planning : depuis Planete > Planning > date de début/fin > sélectionn
 
 interface CoverageControlProps {
   isReadOnly?: boolean;
+  onOpenModeOp?: () => void;
 }
 
-export default function CoverageControl({ isReadOnly = false }: CoverageControlProps) {
+export default function CoverageControl({ isReadOnly = false, onOpenModeOp }: CoverageControlProps) {
   // Independent states for Province and Orly
   const [provinceState, setProvinceState] = useState<ZoneState>({
     contractsFile: null,
@@ -220,11 +221,24 @@ export default function CoverageControl({ isReadOnly = false }: CoverageControlP
               Vérification automatisée de la couverture du planning par un contrat pour HubJob PROVINCE et ORLY.
             </p>
           </div>
-          {isReadOnly && (
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 font-black text-xs border border-amber-300 shadow-sm shrink-0 self-start md:self-auto">
-              <span>Mode Consultation (Lecture seule)</span>
-            </div>
-          )}
+
+          <div className="flex items-center gap-3 shrink-0 self-start md:self-auto">
+            <button
+              type="button"
+              onClick={onOpenModeOp}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 hover:border-white/30 backdrop-blur-xs transition-all shadow-sm cursor-pointer"
+              id="coverage-control-mode-op-btn"
+            >
+              <Info className="w-3.5 h-3.5 text-white" />
+              <span>Mode Op</span>
+            </button>
+
+            {isReadOnly && (
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 font-black text-xs border border-amber-300 shadow-sm">
+                <span>Mode Consultation (Lecture seule)</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

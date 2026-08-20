@@ -61,6 +61,7 @@ interface RHFolderGeneratorProps {
   onAddCollaborator: (collab: Omit<Collaborator, 'id'>) => void;
   onBackToHome?: () => void;
   isReadOnly?: boolean;
+  onOpenModeOp?: () => void;
 }
 
 interface DropZoneDef {
@@ -226,7 +227,8 @@ export default function RHFolderGenerator({
   collaborators,
   onAddCollaborator,
   onBackToHome,
-  isReadOnly = false
+  isReadOnly = false,
+  onOpenModeOp
 }: RHFolderGeneratorProps) {
   // Collaborator search & selection state
   const [searchQuery, setSearchQuery] = useState('');
@@ -489,6 +491,16 @@ export default function RHFolderGenerator({
         </div>
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
 
+        <button
+          type="button"
+          onClick={onOpenModeOp}
+          className="absolute top-3 right-3 sm:top-3.5 sm:right-3.5 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 hover:border-white/30 backdrop-blur-xs transition-all shadow-sm cursor-pointer"
+          id="rh-generator-mode-op-btn"
+        >
+          <Info className="w-3.5 h-3.5 text-white" />
+          <span>Mode Op</span>
+        </button>
+
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
@@ -507,7 +519,7 @@ export default function RHFolderGenerator({
           </div>
 
           {/* Quick Counter & Reset shortcut if active */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 pt-4 md:pt-6">
             <div className="bg-black/20 backdrop-blur-md rounded-xl p-3 border border-white/20 flex items-center gap-4 text-xs shrink-0">
               <div>
                 <p className="text-white/70 font-semibold uppercase tracking-wider text-[10px]">Fichiers déposés</p>

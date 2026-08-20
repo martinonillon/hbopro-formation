@@ -35,7 +35,8 @@ import {
   Square,
   UserCheck,
   Users,
-  AlertTriangle
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { Collaborator, TrainingLog, TrainingModule, RecruitmentRecord } from '../types';
 import { ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES, RESULTATS, CONSIGNES, getEscaleStyle, getCategoryOfModule, CATEGORY_COLORS } from '../data/modulesData';
@@ -59,6 +60,7 @@ interface CollaboratorsListProps {
   selectedCollabId?: string | null;
   onSelectCollabId?: (id: string | null) => void;
   isReadOnly?: boolean;
+  onOpenModeOp?: () => void;
 }
 
 export default function CollaboratorsList({
@@ -78,7 +80,8 @@ export default function CollaboratorsList({
   onNavigateToRecruitment,
   selectedCollabId: propSelectedCollabId,
   onSelectCollabId,
-  isReadOnly = false
+  isReadOnly = false,
+  onOpenModeOp
 }: CollaboratorsListProps) {
   // State
   const [searchTerm, setSearchTerm] = useState('');
@@ -1518,6 +1521,16 @@ export default function CollaboratorsList({
               Consultez les dossiers des intérimaires, gérez leurs habilitations, imputez les temps de formation et suivez la conformité globale par escale.
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={onOpenModeOp}
+            className="absolute top-4 right-4 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 hover:border-white/30 backdrop-blur-xs transition-all shadow-sm cursor-pointer"
+            id="base-interimaires-mode-op-btn"
+          >
+            <Info className="w-3.5 h-3.5 text-white" />
+            <span>Mode Op</span>
+          </button>
         </div>
       </div>
 

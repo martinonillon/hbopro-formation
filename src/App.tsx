@@ -30,7 +30,9 @@ import {
   BookUser,
   TrendingUp,
   FileText,
-  GraduationCap
+  GraduationCap,
+  Info,
+  X
 } from 'lucide-react';
 import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact, RegistrationRequest, DEFAULT_PROVISIONAL_PASSWORD, RecruitmentRecord } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
@@ -104,6 +106,7 @@ export default function App() {
     return [];
   });
   const [isContactsDirectoryOpen, setIsContactsDirectoryOpen] = useState(false);
+  const [activeModeOp, setActiveModeOp] = useState<AppNavId | null>(null);
 
   // Recrutements & Parcours d'intégration
   const [recruitments, setRecruitments] = useState<RecruitmentRecord[]>(INITIAL_RECRUITMENTS);
@@ -2013,6 +2016,349 @@ export default function App() {
     }
   };
 
+  // Helper to render Mode Op content per application with custom premium layout
+  const renderModeOpContent = (appId: AppNavId) => {
+    switch (appId) {
+      case 'recruitment':
+        return (
+          <div className="space-y-6">
+            <div className="bg-purple-50 p-4.5 rounded-xl border border-purple-100 flex items-start gap-3">
+              <div className="p-2 bg-purple-200 text-purple-800 rounded-lg shrink-0">
+                <Info className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-purple-950 text-sm">Parcours d'intégration de recrutement</h4>
+                <p className="text-xs text-purple-800/90 mt-0.5 leading-relaxed">
+                  Cette application centralise les recrutements, suit l'intégration en 10 étapes obligatoires et synchronise les dossiers finalisés vers la base générale des intérimaires.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-[#061d43] rounded-full" />
+                1. Recherche et création de dossier
+              </h4>
+              <ul className="space-y-2 text-xs text-slate-600 pl-1">
+                <li className="flex items-start gap-2">
+                  <span className="text-[#061d43] font-black mt-0.5">•</span>
+                  <span><strong>Recherche globale :</strong> Saisissez le nom, prénom, escale ou matricule dans la barre de recherche pour localiser instantanément un dossier.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#061d43] font-black mt-0.5">•</span>
+                  <span><strong>Nouveau recrutement :</strong> Cliquez sur <strong>"+ Nouveau"</strong> pour lier un intérimaire existant ou créer un nouveau collaborateur.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-[#061d43] rounded-full" />
+                2. Validation de la checklist d'intégration (10 points)
+              </h4>
+              <ul className="space-y-2.5 text-xs text-slate-600 pl-1">
+                <li className="flex items-start gap-2">
+                  <span className="text-[#061d43] font-black mt-0.5">•</span>
+                  <span><strong>Formulaires & Entretiens :</strong> Complétez la fiche d'entretien, le permis de conduire, les casiers et références.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#061d43] font-black mt-0.5">•</span>
+                  <span><strong>Communication Candidat (E-mail) :</strong>
+                    <div className="mt-1.5 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+                      <p><strong>Mail d'inscription :</strong> Envoi l'e-mail pré-rempli. Rappel : ajouter manuellement la <em>Fiche de renseignement HBO</em> et la <em>Commande dotation</em>.</p>
+                      <p className="mt-1"><strong>Envoi du livret :</strong> Transmet le livret d'accueil. Rappel : joindre le document <em>LDA Intérimaire - PROVINCE</em>.</p>
+                    </div>
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-[#061d43] font-black mt-0.5">•</span>
+                  <span><strong>Accès Plateformes :</strong> Utilisez les boutons <strong>"Ouvrir"</strong> sur chaque carte pour accéder directement aux sites de traitement :
+                    <div className="mt-1.5 grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="p-2 bg-white border border-slate-100 rounded-md"><strong>HBO :</strong> portail.hubjob.fr</div>
+                      <div className="p-2 bg-white border border-slate-100 rounded-md"><strong>Planet :</strong> hubjob.planete-online.fr</div>
+                      <div className="p-2 bg-white border border-slate-100 rounded-md"><strong>Formation :</strong> manager.pika-aero.com</div>
+                      <div className="p-2 bg-white border border-slate-100 rounded-md"><strong>TCA (STITCH) :</strong> aviation-civile.gouv.fr</div>
+                    </div>
+                  </span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-[#061d43] rounded-full" />
+                3. Finalisation & Intégration
+              </h4>
+              <ul className="space-y-2 text-xs text-slate-600 pl-1">
+                <li className="flex items-start gap-2">
+                  <span className="text-[#061d43] font-black mt-0.5">•</span>
+                  <span><strong>Mise en poste :</strong> Cliquez sur "Mise en poste" pour finaliser le parcours. Vous pourrez éditer ou confirmer les coordonnées et le matricule avant que le profil ne soit transféré de façon permanente dans la <strong>Base intérimaires</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-rose-600 font-black mt-0.5">•</span>
+                  <span><strong>Annulation :</strong> En cas d'abandon de parcours, archivez le dossier en statut "Annulé".</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        );
+      case 'formation':
+        return (
+          <div className="space-y-6">
+            <div className="bg-teal-50 p-4.5 rounded-xl border border-teal-100 flex items-start gap-3">
+              <div className="p-2 bg-teal-200 text-teal-800 rounded-lg shrink-0">
+                <GraduationCap className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-teal-950 text-sm">Registre et Suivi de Formation</h4>
+                <p className="text-xs text-teal-800/90 mt-0.5 leading-relaxed">
+                  Pilotez les formations obligatoires et habilitations des intérimaires, gérez les inscriptions et suivez les visas de facturation.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-teal-600 rounded-full" />
+                1. Tableau de bord & KPIs
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Suivez en temps réel le taux de conformité globale, le nombre de formations arrivant à expiration (à recycler) ainsi que les statistiques de réussite par escale.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-teal-600 rounded-full" />
+                2. Planification et Inscription
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Cliquez sur <strong>"Planifier une formation"</strong> pour inscrire un ou plusieurs collaborateurs à une session, renseigner le formateur, le lieu de la session, le cycle (initial ou recyclage) et les horaires précis.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-teal-600 rounded-full" />
+                3. Registre & Visas Administratifs
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Imputez et suivez l'avancement administratif de chaque formation : validez la présence, le résultat (Réussite / Échec) et pilotez les imputations obligatoires de paie et de facturation client.
+              </p>
+            </div>
+          </div>
+        );
+      case 'rhGenerator':
+        return (
+          <div className="space-y-6">
+            <div className="bg-orange-50 p-4.5 rounded-xl border border-orange-100 flex items-start gap-3">
+              <div className="p-2 bg-orange-200 text-orange-800 rounded-lg shrink-0">
+                <FolderSync className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-orange-950 text-sm">Générateur de Dossiers RH</h4>
+                <p className="text-xs text-orange-800/90 mt-0.5 leading-relaxed">
+                  Compilez et normalisez automatiquement l'ensemble des pièces d'un collaborateur au format exact exigé pour l'archivage et l'exportation.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-orange-600 rounded-full" />
+                1. Sélection et Nomenclature
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Sélectionnez un intérimaire à gauche. Toutes les pièces déposées adopteront automatiquement une nomenclature stricte basée sur son identité : <code>NOM_PRENOM_MATRICULE_PIECE.pdf</code>.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-orange-600 rounded-full" />
+                2. Dépôt de fichiers & Normalisation
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Glissez-déposez les fichiers correspondants à chaque carte de document (recto/verso pour la pièce d'identité ou le permis). Le moteur fusionnera automatiquement les images en documents PDF uniques et adaptera la photo d'identité aux dimensions requises.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-orange-600 rounded-full" />
+                3. Exportation ZIP
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Cliquez sur <strong>"Exécuter la génération du dossier RH"</strong> pour compiler toutes les pièces validées et télécharger instantanément une archive ZIP prête pour l'export.
+              </p>
+            </div>
+          </div>
+        );
+      case 'coverageControl':
+        return (
+          <div className="space-y-6">
+            <div className="bg-sky-50 p-4.5 rounded-xl border border-sky-100 flex items-start gap-3">
+              <div className="p-2 bg-sky-200 text-sky-800 rounded-lg shrink-0">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sky-950 text-sm">Contrôle de Couverture</h4>
+                <p className="text-xs text-sky-800/90 mt-0.5 leading-relaxed">
+                  Vérification croisée et détection automatisée des anomalies de planification pour garantir que chaque vacation planifiée possède un contrat de travail.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-sky-600 rounded-full" />
+                1. Choix de la zone & Import
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Sélectionnez l'onglet <strong>PROVINCE</strong> ou <strong>ORLY</strong>. Déposez l'export de contrats CSV (de HBO) et l'export de planning Excel/CSV (de Planet - tâche par client réel).
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-sky-600 rounded-full" />
+                2. Vérification automatisée
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Cliquez sur <strong>"Lancer la vérification"</strong>. L'algorithme analysera les dates et heures de chaque vacation de planning et recherchera un contrat couvrant cette période pour l'agent concerné.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-sky-600 rounded-full" />
+                3. Analyse et export d'anomalies
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Visualisez le tableau d'anomalies de couverture et téléchargez le rapport d'anomalies au format Excel pour lancer les actions correctives.
+              </p>
+            </div>
+          </div>
+        );
+      case 'baseInterimaires':
+        return (
+          <div className="space-y-6">
+            <div className="bg-blue-50 p-4.5 rounded-xl border border-blue-100 flex items-start gap-3">
+              <div className="p-2 bg-blue-200 text-blue-800 rounded-lg shrink-0">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-blue-950 text-sm">Base Intérimaires</h4>
+                <p className="text-xs text-blue-800/90 mt-0.5 leading-relaxed">
+                  Le référentiel unique et partagé de l'ensemble des collaborateurs et agents intérimaires de la plateforme HubStation.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-blue-600 rounded-full" />
+                1. Fiche Profil Collaborateur
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Consultez le dossier complet d'un collaborateur : coordonnées, escale d'affectation, service, matricule et historique de formation.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
+                <span className="w-1.5 h-3.5 bg-blue-600 rounded-full" />
+                2. Actions & Edition
+              </h4>
+              <p className="text-xs text-slate-600 pl-1">
+                Mettez à jour les informations, ajoutez un collaborateur, ou analysez les doublons pour nettoyer la base. Les modifications sont synchronisées en temps réel sur Supabase et Firestore.
+              </p>
+            </div>
+          </div>
+        );
+      case 'operationsTracking':
+        return (
+          <div className="space-y-6">
+            <div className="bg-cyan-50 p-4.5 rounded-xl border border-cyan-100 flex items-start gap-3">
+              <div className="p-2 bg-cyan-200 text-cyan-800 rounded-lg shrink-0">
+                <TrendingUp className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-cyan-950 text-sm">Suivi d'exploitation</h4>
+                <p className="text-xs text-cyan-800/90 mt-0.5 leading-relaxed">
+                  Ce module permet de suivre l'activité d'exploitation détaillée par escale (vols, heures) et d'analyser les indicateurs clés (KPI) de performance et de qualité.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      case 'absenceTracking':
+        return (
+          <div className="space-y-6">
+            <div className="bg-teal-50 p-4.5 rounded-xl border border-teal-100 flex items-start gap-3">
+              <div className="p-2 bg-teal-200 text-teal-800 rounded-lg shrink-0">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-teal-950 text-sm">Absences et retards</h4>
+                <p className="text-xs text-teal-800/90 mt-0.5 leading-relaxed">
+                  Saisissez les absences, retours et retards des agents en temps réel et automatisez la communication ou relance par e-mail ou SMS.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      case 'contractGenerator':
+        return (
+          <div className="space-y-6">
+            <div className="bg-blue-50 p-4.5 rounded-xl border border-blue-100 flex items-start gap-3">
+              <div className="p-2 bg-blue-200 text-[#0062ff] rounded-lg shrink-0">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-blue-950 text-sm">Import contrat</h4>
+                <p className="text-xs text-blue-800/90 mt-0.5 leading-relaxed">
+                  Automatisez les conversions de fichiers d'export de contrats HBO et préparez instantanément les correspondances de barèmes de facturation.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      case 'admin':
+        return (
+          <div className="space-y-6">
+            <div className="bg-indigo-50 p-4.5 rounded-xl border border-indigo-100 flex items-start gap-3">
+              <div className="p-2 bg-indigo-200 text-indigo-800 rounded-lg shrink-0">
+                <Shield className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-indigo-950 text-sm">Administration</h4>
+                <p className="text-xs text-indigo-800/90 mt-0.5 leading-relaxed">
+                  Gérez les utilisateurs enregistrés sur la plateforme, validez les demandes d'inscription d'agents internes et attribuez les habilitations d'accès pour chaque application HubStation.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className="space-y-6">
+            <div className="bg-blue-50 p-4.5 rounded-xl border border-blue-100 flex items-start gap-3">
+              <div className="p-2 bg-blue-200 text-blue-800 rounded-lg shrink-0">
+                <Home className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-blue-950 text-sm">HubStation — Portail d'accueil</h4>
+                <p className="text-xs text-blue-800/90 mt-0.5 leading-relaxed">
+                  Bienvenue sur votre portail de contrôle unifié. Utilisez le menu latéral gauche pour naviguer entre les différentes applications de la plateforme.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+    }
+  };
+
   // If user account is pending administrator validation, block access with Pending Approval screen
   if (currentUser.status === 'pending') {
     return (
@@ -2128,6 +2474,16 @@ export default function App() {
                         Gérez le registre général des formations, planifiez les sessions, suivez la facturation, l'imputation et consolidez vos budgets.
                       </p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveModeOp('formation')}
+                      className="absolute top-4 right-4 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 hover:border-white/30 backdrop-blur-xs transition-all shadow-sm cursor-pointer"
+                      id="formation-mode-op-btn"
+                    >
+                      <Info className="w-3.5 h-3.5 text-white" />
+                      <span>Mode Op</span>
+                    </button>
                   </div>
                 </div>
 
@@ -2153,14 +2509,25 @@ export default function App() {
               {/* Modules en cours de développement */}
               {activeTab === 'operationsTracking' && userPerms.operationsTracking !== 'Masquer' && (
                 <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl p-8 border border-slate-200 shadow-xs space-y-5 animate-fade-in" id="view-operations-tracking">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-cyan-50 text-[#00c0f0] border border-cyan-200/80 flex items-center justify-center shrink-0">
-                      <TrendingUp className="w-7 h-7" />
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-cyan-50 text-[#00c0f0] border border-cyan-200/80 flex items-center justify-center shrink-0">
+                        <TrendingUp className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-900">Suivi d’exploitation</h2>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">Suivi de l'activité par escale et pilotage des KPI opérationnels</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900">Suivi d’exploitation</h2>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">Suivi de l'activité par escale et pilotage des KPI opérationnels</p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveModeOp('operationsTracking')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 transition-all shadow-3xs cursor-pointer"
+                      id="operations-tracking-mode-op-btn"
+                    >
+                      <Info className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Mode Op</span>
+                    </button>
                   </div>
                   <div className="py-10 px-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-3">
                     <p className="text-sm font-bold text-slate-800">Module en cours de développement</p>
@@ -2181,14 +2548,25 @@ export default function App() {
 
               {activeTab === 'absenceTracking' && userPerms.absenceTracking !== 'Masquer' && (
                 <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl p-8 border border-slate-200 shadow-xs space-y-5 animate-fade-in" id="view-absence-tracking">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-teal-50 text-[#57aea6] border border-teal-200/80 flex items-center justify-center shrink-0">
-                      <Clock className="w-7 h-7" />
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-teal-50 text-[#57aea6] border border-teal-200/80 flex items-center justify-center shrink-0">
+                        <Clock className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-900">Absences et retards</h2>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">Suivi des absences, retards et automatisation du mailing associé</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900">Absences et retards</h2>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">Suivi des absences, retards et automatisation du mailing associé</p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveModeOp('absenceTracking')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 transition-all shadow-3xs cursor-pointer"
+                      id="absence-tracking-mode-op-btn"
+                    >
+                      <Info className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Mode Op</span>
+                    </button>
                   </div>
                   <div className="py-10 px-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-3">
                     <p className="text-sm font-bold text-slate-800">Module en cours de développement</p>
@@ -2209,14 +2587,25 @@ export default function App() {
 
               {activeTab === 'contractGenerator' && userPerms.contractGenerator !== 'Masquer' && (
                 <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl p-8 border border-slate-200 shadow-xs space-y-5 animate-fade-in" id="view-contract-generator">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0062ff] border border-blue-200/80 flex items-center justify-center shrink-0">
-                      <FileText className="w-7 h-7" />
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0062ff] border border-blue-200/80 flex items-center justify-center shrink-0">
+                        <FileText className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-900">Import contrat</h2>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">Automatisation des imports et conversions contractuelles pour HBO</p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900">Import contrat</h2>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">Automatisation des imports et conversions contractuelles pour HBO</p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveModeOp('contractGenerator')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold border border-slate-200 transition-all shadow-3xs cursor-pointer"
+                      id="contract-generator-mode-op-btn"
+                    >
+                      <Info className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Mode Op</span>
+                    </button>
                   </div>
                   <div className="py-10 px-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-3">
                     <p className="text-sm font-bold text-slate-800">Module en cours de développement</p>
@@ -2278,6 +2667,7 @@ export default function App() {
                     setActiveTab('recruitment');
                   }}
                   isReadOnly={userPerms.baseInterimaires === 'Lecture'}
+                  onOpenModeOp={() => setActiveModeOp('baseInterimaires')}
                 />
               )}
 
@@ -2296,6 +2686,7 @@ export default function App() {
                     setActiveTab('collaborators');
                   }}
                   isReadOnly={userPerms.recruitment === 'Lecture'}
+                  onOpenModeOp={() => setActiveModeOp('recruitment')}
                 />
               )}
 
@@ -2382,6 +2773,7 @@ export default function App() {
               {activeTab === 'coverageControl' && userPerms.coverageControl !== 'Masquer' && (
                 <CoverageControl 
                   isReadOnly={userPerms.coverageControl === 'Lecture'}
+                  onOpenModeOp={() => setActiveModeOp('coverageControl')}
                 />
               )}
 
@@ -2391,6 +2783,7 @@ export default function App() {
                   onAddCollaborator={handleAddCollaborator}
                   onBackToHome={() => setActiveTab('home')}
                   isReadOnly={userPerms.rhGenerator === 'Lecture'}
+                  onOpenModeOp={() => setActiveModeOp('rhGenerator')}
                 />
               )}
 
@@ -2406,6 +2799,7 @@ export default function App() {
                   onRejectRegistrationRequest={handleRejectRegistrationRequest}
                   onSendPasswordResetEmail={handleSendPasswordResetEmail}
                   currentUserPermission={userPerms.admin}
+                  onOpenModeOp={() => setActiveModeOp('admin')}
                 />
               )}
             </div>
@@ -2544,6 +2938,64 @@ export default function App() {
             />
           </div>
         </div>
+      )}
+
+      {/* Mode Opératoire Slide-Over Drawer */}
+      {activeModeOp && (
+        <>
+          {/* Backdrop with fade transition */}
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity animate-fade-in"
+            onClick={() => setActiveModeOp(null)}
+          />
+          {/* Drawer panel with slide-in animation */}
+          <div 
+            className="fixed top-0 right-0 h-full w-full max-w-md sm:max-w-lg bg-white shadow-2xl border-l border-slate-200 z-50 flex flex-col animate-slide-in"
+            id="mode-op-drawer"
+          >
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+              <div className="flex items-center gap-2">
+                <Info className="h-5 w-5 text-[#061d43]" />
+                <h3 className="font-bold text-slate-900 text-base sm:text-lg">
+                  {activeModeOp === 'recruitment' ? "Mode Opératoire — Recrutement" :
+                   activeModeOp === 'formation' ? "Mode Opératoire — Formation" :
+                   activeModeOp === 'rhGenerator' ? "Mode Opératoire — Dossier RH" :
+                   activeModeOp === 'coverageControl' ? "Mode Opératoire — Contrôle Couverture" :
+                   activeModeOp === 'baseInterimaires' ? "Mode Opératoire — Base Intérimaires" :
+                   activeModeOp === 'operationsTracking' ? "Mode Opératoire — Suivi d'exploitation" :
+                   activeModeOp === 'absenceTracking' ? "Mode Opératoire — Absences & Retards" :
+                   activeModeOp === 'contractGenerator' ? "Mode Opératoire — Import Contrats" :
+                   activeModeOp === 'admin' ? "Mode Opératoire — Administration" :
+                   "Mode Opératoire — Accueil"}
+                </h3>
+              </div>
+              <button
+                onClick={() => setActiveModeOp(null)}
+                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+                title="Fermer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Drawer Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 text-slate-800 text-sm leading-relaxed" id="mode-op-drawer-body">
+              {renderModeOpContent(activeModeOp)}
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveModeOp(null)}
+                className="px-5 py-2.5 bg-[#061d43] hover:bg-[#0a2c66] text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                Compris, fermer
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
     </div>
