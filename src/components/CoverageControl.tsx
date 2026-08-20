@@ -319,9 +319,12 @@ function ZoneCard({
     return (
       (item.Matricule && item.Matricule.toLowerCase().includes(term)) ||
       (item.Agent && item.Agent.toLowerCase().includes(term)) ||
-      (item["Lieu / Client"] && item["Lieu / Client"].toLowerCase().includes(term)) ||
       (item.Motif && item.Motif.toLowerCase().includes(term)) ||
-      (item["Date Vacation"] && item["Date Vacation"].toLowerCase().includes(term))
+      (item["Date Vacation"] && item["Date Vacation"].toLowerCase().includes(term)) ||
+      (item.Client && item.Client.toLowerCase().includes(term)) ||
+      (item["Remplacement de"] && item["Remplacement de"].toLowerCase().includes(term)) ||
+      (item["Début"] && item["Début"].toLowerCase().includes(term)) ||
+      (item["Fin"] && item["Fin"].toLowerCase().includes(term))
     );
   });
 
@@ -552,15 +555,18 @@ function ZoneCard({
                     <th className="py-2.5 px-3">Matricule</th>
                     <th className="py-2.5 px-3">Agent</th>
                     <th className="py-2.5 px-3">Date Vacation</th>
-                    <th className="py-2.5 px-3">Lieu / Client</th>
+                    <th className="py-2.5 px-3">Début</th>
+                    <th className="py-2.5 px-3">Fin</th>
                     <th className="py-2.5 px-3">Motif</th>
+                    <th className="py-2.5 px-3">Remplacement de</th>
+                    <th className="py-2.5 px-3">Client</th>
                     <th className="py-2.5 px-3">Statut</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {state.results.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 px-4 text-center">
+                      <td colSpan={9} className="py-12 px-4 text-center">
                         <div className="space-y-2 max-w-sm mx-auto">
                           <div className="w-10 h-10 bg-slate-200/60 text-slate-400 rounded-xl flex items-center justify-center mx-auto">
                             <FileSpreadsheet className="h-5 w-5" />
@@ -578,7 +584,7 @@ function ZoneCard({
                     </tr>
                   ) : filteredResults.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
+                      <td colSpan={9} className="py-8 text-center text-xs text-slate-500">
                         Aucun résultat ne correspond à la recherche "{searchTerm}".
                       </td>
                     </tr>
@@ -588,8 +594,11 @@ function ZoneCard({
                         <td className="py-2 px-3 font-mono font-bold text-slate-800">{item.Matricule}</td>
                         <td className="py-2 px-3 font-medium text-slate-800">{item.Agent}</td>
                         <td className="py-2 px-3 text-slate-600">{item["Date Vacation"]}</td>
-                        <td className="py-2 px-3 text-slate-600">{item["Lieu / Client"]}</td>
+                        <td className="py-2 px-3 text-slate-600 font-mono">{item["Début"]}</td>
+                        <td className="py-2 px-3 text-slate-600 font-mono">{item["Fin"]}</td>
                         <td className="py-2 px-3 text-slate-600">{item.Motif}</td>
+                        <td className="py-2 px-3 text-slate-600">{item["Remplacement de"]}</td>
+                        <td className="py-2 px-3 text-slate-600">{item.Client}</td>
                         <td className="py-2 px-3">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-bold text-[10px] uppercase">
                             <AlertTriangle className="h-3 w-3" />
@@ -728,12 +737,6 @@ function ExtractionGuidePanel({ zoneTitle }: { zoneTitle: string }) {
               <span>tache par client <span className="text-slate-400 text-[10px] font-normal">(tous - planning réel - regrouper par salle - trier par nom - excel - cocher toutes les cases)</span></span>
             </li>
           </ul>
-
-          <div className="mt-2.5 p-2 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-[11px] text-red-600 font-extrabold leading-snug">
-              ⚠️ Avant d'importer le fichier "tache par client", pensez à l'ouvrir, supprimer le logo et les 6 premières lignes vides puis le sauvegarder.
-            </p>
-          </div>
         </div>
       </div>
     </div>

@@ -99,10 +99,14 @@ export function findCol(columns: string[], patterns: string[]): string | null {
 }
 
 /** Lit un fichier (Buffer / Uint8Array / ArrayBuffer) xlsx ou csv et renvoie un tableau d'objets. */
-export function readFileToRows(buffer: Buffer | Uint8Array | ArrayBuffer): any[] {
+export function readFileToRows(buffer: Buffer | Uint8Array | ArrayBuffer, skipRows?: number): any[] {
   const workbook = XLSX.read(buffer, { type: 'array', raw: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sheet, { defval: null, raw: true });
+  const options: any = { defval: null, raw: true };
+  if (skipRows !== undefined && skipRows > 0) {
+    options.range = skipRows;
+  }
+  return XLSX.utils.sheet_to_json(sheet, options);
 }
 
 /** Met toutes les clés d'un objet en minuscules/trim. */
@@ -114,12 +118,27 @@ export function lowerKeys(row: Record<string, any>): Record<string, any> {
   return out;
 }
 
+/** Formate une heure Excel (numérique fractionnaire ou chaîne). */
+export function formatExcelTime(val: any): string {
+  if (val === null || val === undefined || val === "") return "";
+  if (typeof val === 'number' && val >= 0 && val < 1) {
+    const totalSeconds = Math.round(val * 86400);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+  return String(val).trim();
+}
+
 export interface Anomaly {
   Matricule: string;
   Agent: string;
   "Date Vacation": string;
-  "Lieu / Client": string;
+  "Début": string;
+  "Fin": string;
   Motif: string;
+  "Remplacement de": string;
+  Client: string;
   Statut: string;
 }
 
@@ -136,7 +155,7 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
   const warnings: string[] = [];
 
   let rowsC = readFileToRows(bufferContrats).map(lowerKeys);
-  let rowsP = readFileToRows(bufferPlanning).map(lowerKeys);
+  let rowsP = readFileToRows(bufferPlanning, 6).map(lowerKeys);
 
   if (rowsC.length === 0 || rowsP.length === 0) {
     return { anomalies: [], warnings: ["❌ Un des deux fichiers est vide ou illisible."], xlsxBase64: null };
@@ -194,6 +213,10 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
       agent: r[colPAgent] ?? "",
       lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
       motif: r['motif'] ?? "",
+      client: r['activité'] ?? r['activite'] ?? "",
+      remplacementDe: r['remplacement de'] ?? "",
+      debut: formatExcelTime(r['début'] ?? r['debut']),
+      fin: formatExcelTime(r['fin']),
     };
   });
 
@@ -224,8 +247,11 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
         Matricule: p.mat,
         Agent: p.agent,
         "Date Vacation": p.dateVac.toLocaleDateString('fr-FR'),
-        "Lieu / Client": p.lieu,
+        "Début": p.debut,
+        "Fin": p.fin,
         Motif: p.motif,
+        "Remplacement de": p.remplacementDe,
+        Client: p.client,
         Statut: "Non couvert",
       });
     }
@@ -261,7 +287,7 @@ export function controleCouvertureProvince(bufferContrats: Buffer | Uint8Array, 
   const warnings: string[] = [];
 
   let rowsC = readFileToRows(bufferContrats).map(lowerKeys);
-  let rowsP = readFileToRows(bufferPlanning).map(lowerKeys);
+  let rowsP = readFileToRows(bufferPlanning, 6).map(lowerKeys);
 
   if (rowsC.length === 0 || rowsP.length === 0) {
     return { anomalies: [], warnings: ["❌ Un des deux fichiers est vide ou illisible."], xlsxBase64: null };
@@ -306,6 +332,10 @@ export function controleCouvertureProvince(bufferContrats: Buffer | Uint8Array, 
       agent: r[colPAgent] ?? "",
       lieu: r['lieu de la commande'] ?? r['lieu'] ?? "",
       motif: r['motif'] ?? "",
+      client: r['activité'] ?? r['activite'] ?? "",
+      remplacementDe: r['remplacement de'] ?? "",
+      debut: formatExcelTime(r['début'] ?? r['debut']),
+      fin: formatExcelTime(r['fin']),
     };
   });
 
@@ -336,8 +366,11 @@ export function controleCouvertureProvince(bufferContrats: Buffer | Uint8Array, 
         Matricule: p.mat,
         Agent: p.agent,
         "Date Vacation": p.dateVac.toLocaleDateString('fr-FR'),
-        "Lieu / Client": p.lieu,
+        "Début": p.debut,
+        "Fin": p.fin,
         Motif: p.motif,
+        "Remplacement de": p.remplacementDe,
+        Client: p.client,
         Statut: "Non couvert",
       });
     }
