@@ -484,72 +484,88 @@ export default function RHFolderGenerator({
     <div className="w-full space-y-6 pb-28 animate-fade-in" id="rh-folder-generator-view">
       
       {/* Top Header Banner */}
-      <div className="bg-gradient-to-r from-[#ff751f] via-[#f4511e] to-[#d84315] rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden">
-        {/* Large Watermark Background Icon */}
-        <div className="absolute -right-8 -bottom-10 text-white/15 pointer-events-none select-none">
-          <FolderGit2 className="w-64 h-64 sm:w-72 sm:h-72 stroke-[1.2]" />
-        </div>
+      <div 
+        className="bg-gradient-to-r from-[#061d43] via-[#0d2e6b] to-[#ff751f] rounded-2xl p-6 sm:p-7 text-white shadow-md relative overflow-hidden"
+        id="rh-folder-generator-header-banner"
+      >
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 skew-x-12 pointer-events-none" />
 
-        <button
-          type="button"
-          onClick={onOpenModeOp}
-          className="absolute top-3 right-3 sm:top-3.5 sm:right-3.5 z-10 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 hover:border-white/30 backdrop-blur-xs transition-all shadow-sm cursor-pointer"
-          id="rh-generator-mode-op-btn"
-        >
-          <Info className="w-3.5 h-3.5 text-white" />
-          <span>Mode Op</span>
-        </button>
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
+        <div className="relative z-10 space-y-4">
+          {/* Top Line: Title & Mode Op button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                Générateur de Dossier RH
-              </h1>
-              {isReadOnly && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-amber-950 border border-amber-300 shadow-xs">
-                  Lecture seule
+              <div className="p-2.5 bg-[#ff751f]/15 text-[#ff751f] border border-[#ff751f]/30 rounded-xl backdrop-blur-xs flex items-center justify-center">
+                <FolderGit2 className="w-6 h-6" />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                  Dossier RH
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#ff751f]/15 text-[#ff751f] border border-[#ff751f]/30">
+                  Générateur & Standardisation
                 </span>
-              )}
-            </div>
-            <p className="text-xs sm:text-sm text-white/95 font-medium">
-              Standardisez le dossier RH des intérimaires hubjob
-            </p>
-          </div>
-
-          {/* Quick Counter & Reset shortcut if active */}
-          <div className="flex items-center gap-3 pt-4 md:pt-6">
-            <div className="bg-black/20 backdrop-blur-md rounded-xl p-3 border border-white/20 flex items-center gap-4 text-xs shrink-0">
-              <div>
-                <p className="text-white/70 font-semibold uppercase tracking-wider text-[10px]">Fichiers déposés</p>
-                <p className="text-lg font-black text-white">{totalUploadedFilesCount} / 19</p>
-              </div>
-              <div className="h-8 w-px bg-white/20" />
-              <div>
-                <p className="text-white/70 font-semibold uppercase tracking-wider text-[10px]">Dossiers actifs</p>
-                <p className="text-lg font-black text-emerald-300">{activeCardsCount} / 12</p>
-              </div>
-              <div className="h-8 w-px bg-white/20" />
-              <div>
-                <p className="text-white/70 font-semibold uppercase tracking-wider text-[10px]">Intérimaire</p>
-                <p className="text-xs font-bold text-white">
-                  {selectedCollaborator ? `${selectedCollaborator.lastName}` : 'En attente'}
-                </p>
               </div>
             </div>
 
-            {(selectedCollaborator || totalUploadedFilesCount > 0) && (
+            <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
               <button
                 type="button"
-                onClick={handleResetFolder}
-                className="inline-flex items-center gap-1.5 px-3 py-3 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-xl text-xs font-bold transition-all backdrop-blur-md cursor-pointer hover:shadow"
-                title="Réinitialiser tout le dossier à zéro"
+                onClick={onOpenModeOp}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 hover:border-white/30 backdrop-blur-xs transition-all shadow-sm cursor-pointer"
+                id="rh-generator-mode-op-btn"
               >
-                <RotateCcw className="w-4 h-4" />
-                <span className="hidden sm:inline">Réinitialiser</span>
+                <Info className="w-3.5 h-3.5 text-white" />
+                <span>Mode Op</span>
               </button>
-            )}
+
+              {isReadOnly && (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-400 text-amber-950 font-black text-xs border border-amber-300 shadow-sm">
+                  <span>Lecture seule</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Line: Description & Quick Metrics */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-center">
+            <div className="lg:col-span-6">
+              <p className="text-xs sm:text-sm text-orange-100/90 leading-relaxed font-normal">
+                Standardisez le dossier RH des intérimaires HubJob : assemblez, renommez au format réglementaire, fusionnez vos fichiers en PDF uniques de qualité et téléchargez l'archive complète.
+              </p>
+            </div>
+            <div className="lg:col-span-6 flex justify-start lg:justify-end">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                {/* KPI 1 */}
+                <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center min-w-[80px]">
+                  <span className="text-[10px] uppercase font-bold text-orange-300 block">Fichiers</span>
+                  <span className="text-lg font-black text-white">{totalUploadedFilesCount}</span>
+                </div>
+                {/* KPI 2 */}
+                <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center min-w-[80px]">
+                  <span className="text-[10px] uppercase font-bold text-emerald-300 block">Dossiers</span>
+                  <span className="text-lg font-black text-white">{activeCardsCount} / 12</span>
+                </div>
+                {/* KPI 3 */}
+                <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center min-w-[100px]">
+                  <span className="text-[10px] uppercase font-bold text-blue-300 block">Intérimaire</span>
+                  <span className="text-xs font-black text-white block truncate max-w-[120px]" title={selectedCollaborator ? `${selectedCollaborator.lastName} ${selectedCollaborator.firstName}` : 'Aucun'}>
+                    {selectedCollaborator ? `${selectedCollaborator.lastName}` : 'En attente'}
+                  </span>
+                </div>
+                {/* Reset button if active */}
+                {(selectedCollaborator || totalUploadedFilesCount > 0) && (
+                  <button
+                    type="button"
+                    onClick={handleResetFolder}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white/15 hover:bg-white/25 text-white border border-white/30 rounded-xl text-xs font-bold transition-all backdrop-blur-md cursor-pointer hover:shadow"
+                    title="Réinitialiser tout le dossier à zéro"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Réinitialiser</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

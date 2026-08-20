@@ -44,7 +44,7 @@ export const MAIN_NAV_ITEMS: NavItemConfig[] = [
     id: 'home',
     label: 'Accueil',
     icon: Home,
-    color: '#38bdf8'
+    color: '#ffffff'
   },
   {
     id: 'operationsTracking',

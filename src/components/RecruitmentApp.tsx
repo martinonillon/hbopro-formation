@@ -31,7 +31,10 @@ import {
   ChevronRight,
   RotateCw,
   Paperclip,
-  Info
+  Info,
+  Globe,
+  Fingerprint,
+  IdCard
 } from 'lucide-react';
 import { 
   Collaborator, 
@@ -86,6 +89,17 @@ const INTEGRATION_FIELDS: Array<{
   { key: 'receptionTca', label: 'Réception TCA', icon: CreditCard },
 ];
 
+const ESCALE_FILTERS = [
+  { code: 'BES', label: 'BES', activeClass: 'bg-rose-600 hover:bg-rose-700 text-white border-rose-700 ring-2 ring-rose-200', inactiveClass: 'bg-rose-50/50 hover:bg-rose-100 text-rose-700 border-rose-200' },
+  { code: 'BOD', label: 'BOD', activeClass: 'bg-amber-400 hover:bg-amber-500 text-slate-900 border-amber-500 ring-2 ring-amber-200', inactiveClass: 'bg-amber-50/50 hover:bg-amber-100 text-amber-800 border-amber-200' },
+  { code: 'LYS', label: 'LYS', activeClass: 'bg-violet-600 hover:bg-violet-700 text-white border-violet-700 ring-2 ring-violet-200', inactiveClass: 'bg-violet-50/50 hover:bg-violet-100 text-violet-700 border-violet-200' },
+  { code: 'MPL', label: 'MPL', activeClass: 'bg-amber-900 hover:bg-amber-950 text-white border-amber-950 ring-2 ring-amber-700', inactiveClass: 'bg-amber-100/50 hover:bg-amber-200 text-amber-900 border-amber-300' },
+  { code: 'MRS', label: 'MRS', activeClass: 'bg-lime-600 hover:bg-lime-700 text-white border-lime-700 ring-2 ring-lime-200', inactiveClass: 'bg-lime-50/50 hover:bg-lime-100 text-lime-700 border-lime-200' },
+  { code: 'NCE', label: 'NCE', activeClass: 'bg-sky-500 hover:bg-sky-600 text-white border-sky-600 ring-2 ring-sky-200', inactiveClass: 'bg-sky-50/50 hover:bg-sky-100 text-sky-700 border-sky-200' },
+  { code: 'NTE', label: 'NTE', activeClass: 'bg-teal-600 hover:bg-teal-700 text-white border-teal-700 ring-2 ring-teal-200', inactiveClass: 'bg-teal-50/50 hover:bg-teal-100 text-teal-700 border-teal-200' },
+  { code: 'TLS', label: 'TLS', activeClass: 'bg-pink-600 hover:bg-pink-700 text-white border-pink-700 ring-2 ring-pink-200', inactiveClass: 'bg-pink-50/50 hover:bg-pink-100 text-pink-700 border-pink-200' },
+];
+
 export default function RecruitmentApp({
   collaborators,
   recruitments,
@@ -118,6 +132,7 @@ export default function RecruitmentApp({
 
   // Global search query to filter recruitment dossiers
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedEscale, setSelectedEscale] = useState<string | null>(null);
 
   // Modals for "+ Nouveau" options
   const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
@@ -222,11 +237,34 @@ export default function RecruitmentApp({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Filtered recruitments based on global search query
+  // Count of "en_cours" dossiers for each escale
+  const escaleCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    recruitments.forEach(rec => {
+      if (rec.status === 'en_cours') {
+        const collab = collaborators.find(c => c.id === rec.collaboratorId);
+        const escale = collab?.escale || 'BOD';
+        counts[escale] = (counts[escale] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [recruitments, collaborators]);
+
+  // Filtered recruitments based on global search query and selected escale
   const filteredRecruitments = useMemo(() => {
+    let result = recruitments;
+
+    if (selectedEscale) {
+      result = result.filter(rec => {
+        const collab = collaborators.find(c => c.id === rec.collaboratorId);
+        const escale = collab?.escale || 'BOD';
+        return escale === selectedEscale;
+      });
+    }
+
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return recruitments;
-    return recruitments.filter(rec => {
+    if (!q) return result;
+    return result.filter(rec => {
       const collab = collaborators.find(c => c.id === rec.collaboratorId);
       const nom = (collab?.lastName || '').toLowerCase();
       const prenom = (collab?.firstName || '').toLowerCase();
@@ -248,7 +286,7 @@ export default function RecruitmentApp({
              phone.includes(q) ||
              email.includes(q);
     });
-  }, [recruitments, collaborators, searchQuery]);
+  }, [recruitments, collaborators, searchQuery, selectedEscale]);
 
   // Split into active and archived
   const activeRecruitments = useMemo(() => {
@@ -927,6 +965,48 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
             )}
           </div>
         </div>
+
+        {/* Filtres rapides par escale */}
+        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mr-1 block sm:inline">
+            Escale :
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {ESCALE_FILTERS.map((f) => {
+              const isActive = selectedEscale === f.code;
+              const count = escaleCounts[f.code] || 0;
+              return (
+                <button
+                  key={f.code}
+                  type="button"
+                  onClick={() => {
+                    setSelectedEscale(isActive ? null : f.code);
+                    setActiveTab('active');
+                  }}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    isActive ? f.activeClass : f.inactiveClass
+                  }`}
+                >
+                  {f.label} ({count})
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => setSelectedEscale(null)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                selectedEscale === null
+                  ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 active:scale-98'
+              }`}
+              disabled={selectedEscale === null}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Réinitialiser</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 3. Liste verticale des cartes de recrutement */}
@@ -977,6 +1057,14 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                 const countTotal = 15;
                 const percentDone = Math.round((countOui / countTotal) * 105) > 100 ? 100 : Math.round((countOui / countTotal) * 100);
                 const isExpanded = expandedCardIds.has(rec.id);
+
+                const getChecklistVal = (key: keyof RecruitmentChecklist) => {
+                  const raw = rec.checklist[key];
+                  if (typeof raw === 'object' && raw !== null) {
+                    return raw.value || 'N/A';
+                  }
+                  return raw || 'N/A';
+                };
 
                 return (
                   <div 
@@ -1051,6 +1139,65 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
 
                       {/* Progression, Actions & Chevron de déploiement */}
                       <div className="flex items-center gap-2.5 self-end md:self-auto shrink-0">
+                        {/* 4 Icônes de suivi */}
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {/* Mail d'inscription */}
+                          <div className="group relative">
+                            <div className={`p-1.5 rounded-lg border transition-all ${
+                              getChecklistVal('mailInscription') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                              getChecklistVal('mailInscription') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                              'bg-slate-850 text-slate-500 border-slate-700'
+                            }`} title="Mail d'inscription">
+                              <Mail className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                              Mail d'inscription : {getChecklistVal('mailInscription')}
+                            </div>
+                          </div>
+
+                          {/* Fiche Planete */}
+                          <div className="group relative">
+                            <div className={`p-1.5 rounded-lg border transition-all ${
+                              getChecklistVal('fichePlanete') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                              getChecklistVal('fichePlanete') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                              'bg-slate-850 text-slate-500 border-slate-700'
+                            }`} title="Fiche Planete">
+                              <Globe className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                              Fiche Planete : {getChecklistVal('fichePlanete')}
+                            </div>
+                          </div>
+
+                          {/* Fiche HBO */}
+                          <div className="group relative">
+                            <div className={`p-1.5 rounded-lg border transition-all ${
+                              getChecklistVal('ficheHbo') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                              getChecklistVal('ficheHbo') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                              'bg-slate-850 text-slate-500 border-slate-700'
+                            }`} title="Fiche HBO">
+                              <Fingerprint className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                              Fiche HBO : {getChecklistVal('ficheHbo')}
+                            </div>
+                          </div>
+
+                          {/* Demande de TCA */}
+                          <div className="group relative">
+                            <div className={`p-1.5 rounded-lg border transition-all ${
+                              getChecklistVal('demandeTca') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                              getChecklistVal('demandeTca') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                              'bg-slate-850 text-slate-500 border-slate-700'
+                            }`} title="Demande de TCA">
+                              <IdCard className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                              Demande de TCA : {getChecklistVal('demandeTca')}
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="bg-slate-800/90 border border-slate-700 px-2.5 py-1 rounded-xl flex items-center gap-2">
                           <div className="text-right">
                             <span className="text-[9px] text-slate-400 font-bold block uppercase leading-tight">Conformité</span>
