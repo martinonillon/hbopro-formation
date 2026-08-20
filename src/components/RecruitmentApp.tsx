@@ -29,7 +29,8 @@ import {
   RotateCcw,
   Sparkles,
   ChevronRight,
-  RotateCw
+  RotateCw,
+  Paperclip
 } from 'lucide-react';
 import { 
   Collaborator, 
@@ -55,21 +56,32 @@ interface RecruitmentAppProps {
   isReadOnly?: boolean;
 }
 
-const CHECKLIST_FIELDS: Array<{
+const ENTRETIEN_FIELDS: Array<{
   key: keyof RecruitmentChecklist;
   label: string;
   icon: React.ElementType;
 }> = [
-  { key: 'vehicule', label: 'Véhicule', icon: Car },
+  { key: 'ficheEntretienRemplie', label: 'Fiche "check-list entretien" remplie ?', icon: FileText },
+  { key: 'vehicule', label: 'Véhicule et permis B', icon: Car },
   { key: 'horaireDecale', label: 'Horaire décalé', icon: Moon },
-  { key: 'controleDossierFormation', label: 'Contrôle dossier formation', icon: GraduationCap },
+  { key: 'verificationAntecedents', label: 'Vérification des antécédents', icon: ShieldCheck },
+  { key: 'controleReferences', label: 'Contrôle de références', icon: CheckCircle2 },
+];
+
+const INTEGRATION_FIELDS: Array<{
+  key: keyof RecruitmentChecklist;
+  label: string;
+  icon: React.ElementType;
+}> = [
   { key: 'mailInscription', label: "Mail d'inscription", icon: Mail },
-  { key: 'ficheHbo', label: 'Fiche HBO', icon: FileText },
-  { key: 'fichePlanete', label: 'Fiche Planète', icon: FileSpreadsheet },
-  { key: 'demandeTca', label: 'Demande TCA', icon: CreditCard },
+  { key: 'receptionDossier', label: 'Réception du dossier et mise aux normes', icon: ShieldCheck },
+  { key: 'envoiLivretAccueil', label: "Envoi du livret d'accueil ITM", icon: ShieldCheck },
+  { key: 'ficheHbo', label: 'Création fiche HBO', icon: FileText },
+  { key: 'fichePlanete', label: 'Création fiche Planet', icon: FileSpreadsheet },
+  { key: 'controleDossierFormation', label: 'Contrôle dossier formation', icon: GraduationCap },
   { key: 'commandeFormation', label: 'Commande formation', icon: BookOpen },
-  { key: 'envoiLivretAccueil', label: "Envoi livret d'accueil", icon: ShieldCheck },
-  { key: 'miseAuxNormesDossierRh', label: 'Mise aux normes dossier RH', icon: ShieldCheck },
+  { key: 'demandeTca', label: 'Demande de TCA', icon: CreditCard },
+  { key: 'receptionTca', label: 'Réception TCA', icon: CreditCard },
 ];
 
 export default function RecruitmentApp({
@@ -101,9 +113,13 @@ export default function RecruitmentApp({
     });
   };
 
-  // Search in Collaborators to add to Recruitment
+  // Global search query to filter recruitment dossiers
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+
+  // Modals for "+ Nouveau" options
+  const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
+  const [isSelectExistingModalOpen, setIsSelectExistingModalOpen] = useState(false);
+  const [collabSearchQuery, setCollabSearchQuery] = useState('');
 
   // New Collaborator Modal State
   const [isNewCollabModalOpen, setIsNewCollabModalOpen] = useState(false);
@@ -122,6 +138,14 @@ export default function RecruitmentApp({
 
   // Modal for delete confirmation
   const [recruitmentToDelete, setRecruitmentToDelete] = useState<RecruitmentRecord | null>(null);
+
+  // Email warning / attachment reminder modal state
+  const [emailReminderModal, setEmailReminderModal] = useState<{
+    isOpen: boolean;
+    type: 'mailInscription' | 'envoiLivretAccueil';
+    mailtoUrl: string;
+    attachmentReminder: string;
+  } | null>(null);
 
   // States for "Mise en poste" confirmation and collaborator editing workflow
   const [activeTransitionRecruitment, setActiveTransitionRecruitment] = useState<RecruitmentRecord | null>(null);
@@ -195,19 +219,47 @@ export default function RecruitmentApp({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Filtered recruitments
+  // Filtered recruitments based on global search query
+  const filteredRecruitments = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return recruitments;
+    return recruitments.filter(rec => {
+      const collab = collaborators.find(c => c.id === rec.collaboratorId);
+      const nom = (collab?.lastName || '').toLowerCase();
+      const prenom = (collab?.firstName || '').toLowerCase();
+      const displayName = (rec.collaboratorName || '').toLowerCase();
+      const escale = (collab?.escale || '').toLowerCase();
+      const poste = (collab?.poste || '').toLowerCase();
+      const service = (collab?.service || '').toLowerCase();
+      const matricule = (collab?.matricule || '').toLowerCase();
+      const phone = (collab?.phone || '').toLowerCase();
+      const email = (collab?.email || '').toLowerCase();
+
+      return nom.includes(q) ||
+             prenom.includes(q) ||
+             displayName.includes(q) ||
+             escale.includes(q) ||
+             poste.includes(q) ||
+             service.includes(q) ||
+             matricule.includes(q) ||
+             phone.includes(q) ||
+             email.includes(q);
+    });
+  }, [recruitments, collaborators, searchQuery]);
+
+  // Split into active and archived
   const activeRecruitments = useMemo(() => {
-    return recruitments.filter(r => r.status === 'en_cours');
-  }, [recruitments]);
+    return filteredRecruitments.filter(r => r.status === 'en_cours');
+  }, [filteredRecruitments]);
 
   const archivedRecruitments = useMemo(() => {
-    return recruitments.filter(r => r.status === 'mise_en_poste' || r.status === 'annule');
-  }, [recruitments]);
+    return filteredRecruitments.filter(r => r.status === 'mise_en_poste' || r.status === 'annule');
+  }, [filteredRecruitments]);
 
-  // Collaborator search results
-  const matchingCollaborators = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase().trim();
+  // Collaborator search results for selector modal
+  const matchingCollabsForSelection = useMemo(() => {
+    if (!collabSearchQuery.trim()) return [];
+    const q = collabSearchQuery.toLowerCase().trim();
     return collaborators
       .filter(c => {
         const full1 = `${c.firstName} ${c.lastName}`.toLowerCase();
@@ -217,13 +269,335 @@ export default function RecruitmentApp({
         const esc = (c.escale || '').toLowerCase();
         return full1.includes(q) || full2.includes(q) || mat.includes(q) || poste.includes(q) || esc.includes(q);
       })
-      .slice(0, 8);
-  }, [collaborators, searchQuery]);
+      .slice(0, 10);
+  }, [collaborators, collabSearchQuery]);
+
+  const handleSendInscriptionEmail = (rec: RecruitmentRecord) => {
+    const collab = collaborators.find(c => c.id === rec.collaboratorId);
+    const emailDest = collab?.email || '';
+    const prenom = collab?.firstName || rec.collaboratorName?.split(' ')[0] || 'Candidat';
+
+    if (!emailDest) {
+      showToast("Attention: Cet intérimaire n'a pas d'adresse e-mail renseignée.", "warning");
+    }
+
+    const subject = "[hubjob] 🚀 Félicitations ! Votre candidature est retenue";
+    const body = `Bonjour ${prenom},
+
+Bonne nouvelle : votre candidature est retenue ! Félicitations ! 🎉
+
+📁 Constitution de votre dossier
+
+Pour finaliser votre inscription et valider votre intégration, nous avons besoin des documents suivants :
+
+- Fiche de renseignement complétée et signée
+- CV à jour
+- Pièce d’identité en cours de validité (copie couleur et recto/verso) :
+  * Ressortissants français : Carte Nationale d’Identité (CNI) ou Passeport.
+  * Ressortissants de l’Union Européenne : Carte Nationale d’Identité (CNI) ou Passeport ou Carte de séjour.
+  * Autres ressortissants : Passeport et Carte de séjour ou de résident.
+- Attestation de carte vitale
+- Permis de conduire (copie couleur et recto/verso)
+- Carte grise (copie couleur et recto) :
+  * Si la carte grise n’est pas à votre nom, joindre une attestation d’assurance mentionnant votre nom.
+- Justificatif de domicile de moins de 3 mois :
+  * Facture d’eau, d’électricité, de gaz, de téléphone, quittance de loyer datant de moins de 3 mois.
+  * Si le justificatif n’est pas à votre nom, joindre une attestation sur l’honneur de la personne vous hébergeant ainsi qu’une copie de sa pièce d’identité.
+- Relevé d’identité bancaire (RIB)
+- Extrait du casier judiciaire (bulletin n°3) datant de moins de 3 mois :
+  * + casier judiciaire du pays d’origine si réside depuis moins de 3 ans en France
+  * Possibilité de faire la demande en ligne : https://casier-judiciaire.justice.gouv.fr/pages/accueil.xhtml
+- 1 photo d’identité (couleur et de bonne qualité, sur fond blanc, visage dégagé)
+- Fiche de dotation uniforme remplie
+- Dossier de formation Aéro complet
+
+Nous vous remercions de bien vouloir nous envoyer ces documents par retour de mail (à recrutement.aero@hubjob.fr), dans les plus brefs délais.
+
+Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre question.
+Nous avons hâte de vous compter parmi nous !`;
+
+    const mailtoUrl = `mailto:${encodeURIComponent(emailDest)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    
+    setEmailReminderModal({
+      isOpen: true,
+      type: 'mailInscription',
+      mailtoUrl,
+      attachmentReminder: "Pensez à ajouter les pièces jointes ! (Fiche de renseignement HBO, Commande dotation)"
+    });
+  };
+
+  const handleSendLivretAccueilEmail = (rec: RecruitmentRecord) => {
+    const collab = collaborators.find(c => c.id === rec.collaboratorId);
+    const emailDest = collab?.email || '';
+    const prenom = collab?.firstName || rec.collaboratorName?.split(' ')[0] || 'Candidat';
+
+    if (!emailDest) {
+      showToast("Attention: Cet intérimaire n'a pas d'adresse e-mail renseignée.", "warning");
+    }
+
+    const subject = "[hubjob] Bienvenue !";
+    const body = `Bonjour ${prenom},
+
+Nous vous confirmons votre inscription au sein de l’agence. Vous trouverez ci-joint le livret d’accueil intérimaire. 
+
+Merci de télécharger l’application Hubjob sur votre téléphone afin d’accéder à votre compte intérimaire.
+
+Votre TCA est en cours d’édition auprès de l’aéroport, nous vous tiendrons informé de l’avancement du dossier.
+
+Si des formations complémentaires sont nécessaires, vous recevrez prochainement un mail vous en informant.
+
+Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre question. À partir d’aujourd’hui, merci d’adresser vos e-mails à aero@hubjob.fr.
+
+À très bientôt.`;
+
+    const mailtoUrl = `mailto:${encodeURIComponent(emailDest)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    setEmailReminderModal({
+      isOpen: true,
+      type: 'envoiLivretAccueil',
+      mailtoUrl,
+      attachmentReminder: "Pensez à ajouter la pièce jointe ! (LDA Intérimaire - PROVINCE)"
+    });
+  };
+
+  const renderChecklistItem = (
+    field: { key: keyof RecruitmentChecklist; label: string; icon: React.ElementType },
+    rec: RecruitmentRecord
+  ) => {
+    const Icon = field.icon;
+    const rawValue = rec.checklist[field.key];
+    
+    // Extract detail with safety checks
+    const currentVal = typeof rawValue === 'object' && rawValue !== null ? rawValue.value : (rawValue || 'N/A');
+    const currentQui = typeof rawValue === 'object' && rawValue !== null ? (rawValue.qui || '') : '';
+    const currentValDate = typeof rawValue === 'object' && rawValue !== null ? (rawValue.date || '') : '';
+
+    const isEntretien = ENTRETIEN_FIELDS.some(f => f.key === field.key);
+
+    const handleValueChange = (val: IntegrationChecklistValue) => {
+      if (isReadOnly) return;
+      const updated = {
+        ...rec.checklist,
+        [field.key]: {
+          value: val,
+          qui: currentQui || '',
+          date: currentValDate || ''
+        }
+      };
+      onUpdateRecruitment(rec.id, { checklist: updated });
+    };
+
+    const handleQuiChange = (q: string) => {
+      if (isReadOnly) return;
+      const updated = {
+        ...rec.checklist,
+        [field.key]: {
+          value: currentVal || 'N/A',
+          qui: q,
+          date: currentValDate || ''
+        }
+      };
+      onUpdateRecruitment(rec.id, { checklist: updated });
+    };
+
+    const handleDateChange = (d: string) => {
+      if (isReadOnly) return;
+      const updated = {
+        ...rec.checklist,
+        [field.key]: {
+          value: currentVal || 'N/A',
+          qui: currentQui || '',
+          date: d
+        }
+      };
+      onUpdateRecruitment(rec.id, { checklist: updated });
+    };
+
+    return (
+      <div 
+        key={field.key}
+        className={`p-3 rounded-xl border transition-all flex items-stretch gap-3 ${
+          currentVal === 'Oui' ? 'bg-emerald-50/40 border-emerald-200 shadow-3xs' :
+          currentVal === 'Non' ? 'bg-rose-50/40 border-rose-200 shadow-3xs' :
+          'bg-slate-50/60 border-slate-200/85 text-slate-750'
+        }`}
+      >
+        {/* Left section: 2/3 width or full width if isEntretien */}
+        <div className={`${isEntretien ? 'w-full' : 'flex-[2]'} flex flex-col justify-between gap-2.5 min-w-0`}>
+          {/* Top left: Icon & Label */}
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className={`p-1.5 rounded-lg shrink-0 ${
+                currentVal === 'Oui' ? 'bg-emerald-100 text-emerald-700' :
+                currentVal === 'Non' ? 'bg-rose-100 text-rose-700' :
+                'bg-slate-200 text-slate-600'
+              }`}>
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              <div className="font-extrabold text-[11px] text-slate-900 leading-snug break-words" title={field.label}>
+                {field.label}
+              </div>
+            </div>
+
+            {field.key === 'mailInscription' && (
+              <button
+                type="button"
+                onClick={() => handleSendInscriptionEmail(rec)}
+                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg border border-blue-200 hover:border-blue-300 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                title="Générer et envoyer l'e-mail d'inscription"
+              >
+                <Mail className="h-3 w-3 text-blue-600 animate-pulse" />
+                <span>Envoyer</span>
+              </button>
+            )}
+
+            {field.key === 'envoiLivretAccueil' && (
+              <button
+                type="button"
+                onClick={() => handleSendLivretAccueilEmail(rec)}
+                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg border border-blue-200 hover:border-blue-300 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                title="Générer et envoyer le livret d'accueil ITM"
+              >
+                <Mail className="h-3 w-3 text-blue-600 animate-pulse" />
+                <span>Envoyer</span>
+              </button>
+            )}
+
+            {field.key === 'ficheHbo' && (
+              <a
+                href="https://portail.hubjob.fr/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg border border-blue-200 hover:border-blue-300 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                title="Ouvrir le portail Hubjob"
+              >
+                <ExternalLink className="h-3 w-3 text-blue-600" />
+                <span>Ouvrir</span>
+              </a>
+            )}
+
+            {field.key === 'fichePlanete' && (
+              <a
+                href="https://hubjob.planete-online.fr/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg border border-blue-200 hover:border-blue-300 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                title="Ouvrir Hubjob Planet"
+              >
+                <ExternalLink className="h-3 w-3 text-blue-600" />
+                <span>Ouvrir</span>
+              </a>
+            )}
+
+            {field.key === 'commandeFormation' && (
+              <a
+                href="https://manager.pika-aero.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg border border-blue-200 hover:border-blue-300 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                title="Ouvrir Pika Aero"
+              >
+                <ExternalLink className="h-3 w-3 text-blue-600" />
+                <span>Ouvrir</span>
+              </a>
+            )}
+
+            {field.key === 'demandeTca' && (
+              <a
+                href="https://popr.stitch.aviation-civile.gouv.fr/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg border border-blue-200 hover:border-blue-300 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                title="Ouvrir le portail d'aviation civile STITCH"
+              >
+                <ExternalLink className="h-3 w-3 text-blue-600" />
+                <span>Ouvrir</span>
+              </a>
+            )}
+          </div>
+
+          {/* Bottom left: 3 buttons */}
+          <div className="grid grid-cols-3 gap-1 bg-white p-0.5 rounded-lg border border-slate-200 shadow-3xs">
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={() => handleValueChange('Oui')}
+              className={`py-1 text-[10px] font-black rounded-md transition-all cursor-pointer flex items-center justify-center gap-0.5 ${
+                currentVal === 'Oui'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Check className="h-2.5 w-2.5" /> Oui
+            </button>
+
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={() => handleValueChange('Non')}
+              className={`py-1 text-[10px] font-black rounded-md transition-all cursor-pointer flex items-center justify-center gap-0.5 ${
+                currentVal === 'Non'
+                  ? 'bg-rose-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <X className="h-2.5 w-2.5" /> Non
+            </button>
+
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={() => handleValueChange('N/A')}
+              className={`py-1 text-[10px] font-black rounded-md transition-all cursor-pointer flex items-center justify-center ${
+                currentVal === 'N/A'
+                  ? 'bg-slate-700 text-white shadow-2xs'
+                  : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              N/A
+            </button>
+          </div>
+        </div>
+
+        {/* Vertical subtle divider */}
+        {!isEntretien && <div className="w-[1px] bg-slate-200/80 shrink-0 self-stretch" />}
+
+        {/* Right section: 1/3 width, with 2 lines */}
+        {!isEntretien && (
+          <div className="flex-1 flex flex-col justify-between gap-1.5 min-w-[100px]">
+            {/* Line 1: Qui? */}
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">Qui ?</label>
+              <input
+                type="text"
+                disabled={isReadOnly}
+                value={currentQui}
+                onChange={(e) => handleQuiChange(e.target.value)}
+                placeholder="ex: Jean"
+                className="w-full px-2 py-0.5 bg-white border border-slate-300 rounded-md text-[10px] font-semibold text-slate-800 focus:border-[#0062FF] focus:outline-hidden disabled:bg-slate-100"
+              />
+            </div>
+
+            {/* Line 2: Date */}
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">Date</label>
+              <input
+                type="date"
+                disabled={isReadOnly}
+                value={currentValDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="w-full px-1 py-0.5 bg-white border border-slate-300 rounded-md text-[9px] font-semibold text-slate-800 focus:border-[#0062FF] focus:outline-hidden disabled:bg-slate-100"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Handle select an existing collaborator to start recruitment
   const handleSelectCollaboratorForRecruitment = (collab: Collaborator) => {
-    setIsSearchDropdownOpen(false);
-    setSearchQuery('');
+    setCollabSearchQuery('');
 
     // Check if collaborator already has an active recruitment
     const existing = recruitments.find(r => r.collaboratorId === collab.id && r.status === 'en_cours');
@@ -303,9 +677,16 @@ export default function RecruitmentApp({
   // Helper to change checklist item
   const handleChecklistChange = (recId: string, currentChecklist: RecruitmentChecklist, key: keyof RecruitmentChecklist, val: IntegrationChecklistValue) => {
     if (isReadOnly) return;
+    const rawValue = currentChecklist[key];
+    const prevQui = typeof rawValue === 'object' && rawValue !== null ? rawValue.qui : '';
+    const prevDate = typeof rawValue === 'object' && rawValue !== null ? rawValue.date : '';
     const updated = {
       ...currentChecklist,
-      [key]: val
+      [key]: {
+        value: val,
+        qui: prevQui || '',
+        date: prevDate || ''
+      }
     };
     onUpdateRecruitment(recId, { checklist: updated });
   };
@@ -313,17 +694,23 @@ export default function RecruitmentApp({
   // Helper to mark all checklist as 'Oui'
   const handleSetAllChecklistOui = (recId: string) => {
     if (isReadOnly) return;
+    const sysDate = new Date().toISOString().split('T')[0];
     const allOui: RecruitmentChecklist = {
-      vehicule: 'Oui',
-      horaireDecale: 'Oui',
-      controleDossierFormation: 'Oui',
-      mailInscription: 'Oui',
-      ficheHbo: 'Oui',
-      fichePlanete: 'Oui',
-      demandeTca: 'Oui',
-      commandeFormation: 'Oui',
-      envoiLivretAccueil: 'Oui',
-      miseAuxNormesDossierRh: 'Oui'
+      ficheEntretienRemplie: { value: 'Oui', qui: 'Sys', date: sysDate },
+      vehicule: { value: 'Oui', qui: 'Sys', date: sysDate },
+      horaireDecale: { value: 'Oui', qui: 'Sys', date: sysDate },
+      verificationAntecedents: { value: 'Oui', qui: 'Sys', date: sysDate },
+      controleReferences: { value: 'Oui', qui: 'Sys', date: sysDate },
+      mailInscription: { value: 'Oui', qui: 'Sys', date: sysDate },
+      receptionDossier: { value: 'Oui', qui: 'Sys', date: sysDate },
+      envoiLivretAccueil: { value: 'Oui', qui: 'Sys', date: sysDate },
+      ficheHbo: { value: 'Oui', qui: 'Sys', date: sysDate },
+      fichePlanete: { value: 'Oui', qui: 'Sys', date: sysDate },
+      controleDossierFormation: { value: 'Oui', qui: 'Sys', date: sysDate },
+      commandeFormation: { value: 'Oui', qui: 'Sys', date: sysDate },
+      demandeTca: { value: 'Oui', qui: 'Sys', date: sysDate },
+      receptionTca: { value: 'Oui', qui: 'Sys', date: sysDate },
+      miseAuxNormesDossierRh: { value: 'Oui', qui: 'Sys', date: sysDate }
     };
     onUpdateRecruitment(recId, { checklist: allOui });
     showToast('Toutes les étapes ont été cochées en "Oui".', 'info');
@@ -332,7 +719,24 @@ export default function RecruitmentApp({
   // Helper to reset all checklist as 'N/A'
   const handleResetAllChecklistNA = (recId: string) => {
     if (isReadOnly) return;
-    onUpdateRecruitment(recId, { checklist: { ...DEFAULT_CHECKLIST } });
+    const allNA: RecruitmentChecklist = {
+      ficheEntretienRemplie: 'N/A',
+      vehicule: 'N/A',
+      horaireDecale: 'N/A',
+      verificationAntecedents: 'N/A',
+      controleReferences: 'N/A',
+      mailInscription: 'N/A',
+      receptionDossier: 'N/A',
+      envoiLivretAccueil: 'N/A',
+      ficheHbo: 'N/A',
+      fichePlanete: 'N/A',
+      controleDossierFormation: 'N/A',
+      commandeFormation: 'N/A',
+      demandeTca: 'N/A',
+      receptionTca: 'N/A',
+      miseAuxNormesDossierRh: 'N/A'
+    };
+    onUpdateRecruitment(recId, { checklist: allNA });
     showToast('Toutes les étapes ont été réinitialisées en "N/A".', 'info');
   };
 
@@ -430,23 +834,19 @@ export default function RecruitmentApp({
 
       {/* 2. Barre d'action & Recherche / Création */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           
-          {/* Recherche d'un intérimaire existant */}
+          {/* Global recruitment dossier search bar */}
           <div className="relative flex-1 max-w-xl">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setIsSearchDropdownOpen(true);
-                }}
-                onFocus={() => setIsSearchDropdownOpen(true)}
-                placeholder="Sélectionner un intérimaire existant (Nom, prénom, matricule, escale)..."
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher un dossier (Nom, prénom, escale, poste, matricule, téléphone, e-mail)..."
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
-                id="search-collaborator-for-recruitment-input"
+                id="global-recruitment-search-input"
               />
               {searchQuery && (
                 <button
@@ -457,68 +857,10 @@ export default function RecruitmentApp({
                 </button>
               )}
             </div>
-
-            {/* Dropdown suggestions */}
-            {isSearchDropdownOpen && matchingCollaborators.length > 0 && (
-              <div 
-                className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-30 overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto animate-fade-in"
-                id="recruitment-search-dropdown"
-              >
-                <div className="p-2 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Intérimaires trouvés ({matchingCollaborators.length})
-                </div>
-                {matchingCollaborators.map(c => {
-                  const hasActive = recruitments.some(r => r.collaboratorId === c.id && r.status === 'en_cours');
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => handleSelectCollaboratorForRecruitment(c)}
-                      className="w-full p-3 text-left hover:bg-purple-50/60 transition-colors flex items-center justify-between gap-3 cursor-pointer group"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 text-xs sm:text-sm group-hover:text-purple-700">
-                            {c.firstName} {c.lastName.toUpperCase()}
-                          </span>
-                          <span className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 text-[10px] font-bold font-mono text-slate-700 rounded">
-                            {c.escale}
-                          </span>
-                          <span className="text-[11px] text-slate-500 font-medium truncate">
-                            {c.service} {c.poste ? `• ${c.poste}` : ''}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          {c.matricule ? `Matricule: ${c.matricule}` : 'Sans matricule'} {c.phone ? `• ${c.phone}` : ''}
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 flex items-center gap-2">
-                        {hasActive ? (
-                          <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
-                            <Clock className="h-3 w-3" /> En cours
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-600 group-hover:bg-purple-700 text-white flex items-center gap-1 shadow-2xs">
-                            <Plus className="h-3.5 w-3.5" /> Ouvrir fiche
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {isSearchDropdownOpen && searchQuery.trim() && matchingCollaborators.length === 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-4 text-center text-xs text-slate-500">
-                Aucun intérimaire trouvé correspondant à "{searchQuery}". Vous pouvez en créer un nouveau avec le bouton ci-contre.
-              </div>
-            )}
           </div>
 
           {/* Bouton + Nouveau Intérimaire & Tab Switcher */}
-          <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          <div className="flex items-center gap-2.5 justify-between md:justify-end flex-wrap sm:flex-nowrap">
             
             {/* Tab switch : En cours vs Archivés */}
             <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 text-xs font-bold">
@@ -552,7 +894,7 @@ export default function RecruitmentApp({
             {!isReadOnly && (
               <button
                 type="button"
-                onClick={() => setIsNewCollabModalOpen(true)}
+                onClick={() => setIsChoiceModalOpen(true)}
                 className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-2 shrink-0"
                 id="recruitment-add-new-btn"
               >
@@ -604,10 +946,13 @@ export default function RecruitmentApp({
                 const matricule = collab?.matricule;
 
                 // Count Oui, Non, N/A
-                const checkValues = Object.values(rec.checklist);
-                const countOui = checkValues.filter(v => v === 'Oui').length;
-                const countTotal = CHECKLIST_FIELDS.length;
-                const percentDone = Math.round((countOui / countTotal) * 100);
+                const countOui = Object.values(rec.checklist).filter(v => {
+                  if (typeof v === 'string') return v === 'Oui';
+                  if (typeof v === 'object' && v !== null) return (v as any).value === 'Oui';
+                  return false;
+                }).length;
+                const countTotal = 15;
+                const percentDone = Math.round((countOui / countTotal) * 105) > 100 ? 100 : Math.round((countOui / countTotal) * 100);
                 const isExpanded = expandedCardIds.has(rec.id);
 
                 return (
@@ -777,12 +1122,12 @@ export default function RecruitmentApp({
                           </div>
                         </div>
 
-                        {/* C. Checklist d'intégration (4 colonnes par ligne, sans sous-titres, compact) */}
-                        <div className="space-y-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                            <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                              <ShieldCheck className="h-3.5 w-3.5 text-purple-600" />
-                              Checklist d'intégration & Conformité ({CHECKLIST_FIELDS.length} critères)
+                        {/* C. Split Checklists (Section 1: Entretien, Section 2: Intégration) */}
+                        <div className="space-y-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                            <h4 className="text-sm font-black uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
+                              <ShieldCheck className="h-4.5 w-4.5 text-purple-600" />
+                              Section 1 : Check-list entretien
                             </h4>
 
                             {!isReadOnly && (
@@ -807,94 +1152,52 @@ export default function RecruitmentApp({
                             )}
                           </div>
 
-                          {/* Grille 4 par ligne */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                            {CHECKLIST_FIELDS.map(field => {
-                              const Icon = field.icon;
-                              const currentVal: IntegrationChecklistValue = rec.checklist[field.key] || 'N/A';
-
-                              return (
-                                <div 
-                                  key={field.key}
-                                  className={`p-2 rounded-lg border transition-all flex flex-col justify-between gap-1.5 ${
-                                    currentVal === 'Oui' ? 'bg-emerald-50/50 border-emerald-200' :
-                                    currentVal === 'Non' ? 'bg-rose-50/50 border-rose-200' :
-                                    'bg-slate-50/80 border-slate-200/80 text-slate-700'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <div className={`p-1 rounded shrink-0 ${
-                                      currentVal === 'Oui' ? 'bg-emerald-100 text-emerald-700' :
-                                      currentVal === 'Non' ? 'bg-rose-100 text-rose-700' :
-                                      'bg-slate-200 text-slate-600'
-                                    }`}>
-                                      <Icon className="h-3 w-3" />
-                                    </div>
-                                    <div className="font-bold text-[11px] text-slate-900 truncate" title={field.label}>
-                                      {field.label}
-                                    </div>
-                                  </div>
-
-                                  {/* 3-Choice Buttons */}
-                                  <div className="grid grid-cols-3 gap-1 bg-white p-0.5 rounded border border-slate-200">
-                                    <button
-                                      type="button"
-                                      disabled={isReadOnly}
-                                      onClick={() => handleChecklistChange(rec.id, rec.checklist, field.key, 'Oui')}
-                                      className={`py-0.5 text-[10px] font-bold rounded transition-all cursor-pointer flex items-center justify-center gap-0.5 ${
-                                        currentVal === 'Oui'
-                                          ? 'bg-emerald-600 text-white shadow-2xs'
-                                          : 'text-slate-600 hover:bg-slate-100'
-                                      }`}
-                                    >
-                                      <Check className="h-2.5 w-2.5" /> Oui
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      disabled={isReadOnly}
-                                      onClick={() => handleChecklistChange(rec.id, rec.checklist, field.key, 'Non')}
-                                      className={`py-0.5 text-[10px] font-bold rounded transition-all cursor-pointer flex items-center justify-center gap-0.5 ${
-                                        currentVal === 'Non'
-                                          ? 'bg-rose-600 text-white shadow-2xs'
-                                          : 'text-slate-600 hover:bg-slate-100'
-                                      }`}
-                                    >
-                                      <X className="h-2.5 w-2.5" /> Non
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      disabled={isReadOnly}
-                                      onClick={() => handleChecklistChange(rec.id, rec.checklist, field.key, 'N/A')}
-                                      className={`py-0.5 text-[10px] font-bold rounded transition-all cursor-pointer flex items-center justify-center ${
-                                        currentVal === 'N/A'
-                                          ? 'bg-slate-700 text-white shadow-2xs'
-                                          : 'text-slate-500 hover:bg-slate-100'
-                                      }`}
-                                    >
-                                      N/A
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                          {/* Section 1 Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {ENTRETIEN_FIELDS.map(field => renderChecklistItem(field, rec))}
                           </div>
-                        </div>
 
-                        {/* D. Zone de Commentaires & Notes d'entretien */}
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block">
-                            Commentaires & Compte-rendu d'entretien
-                          </label>
-                          <textarea
-                            disabled={isReadOnly}
-                            rows={2}
-                            value={rec.commentaires}
-                            onChange={(e) => onUpdateRecruitment(rec.id, { commentaires: e.target.value })}
-                            placeholder="Saisissez ici vos observations, points d'attention, aptitudes ou pièces en attente pour ce candidat..."
-                            className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all disabled:bg-slate-100"
-                          />
+                          {/* Free text field: Compte rendu d'entretien */}
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block">
+                              Compte rendu d'entretien
+                            </label>
+                            <textarea
+                              disabled={isReadOnly}
+                              rows={3}
+                              value={rec.commentairesEntretien || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { commentairesEntretien: e.target.value })}
+                              placeholder="Saisissez ici le compte rendu de l'entretien (observations, points forts, etc.)..."
+                              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all disabled:bg-slate-100"
+                            />
+                          </div>
+
+                          <div className="border-t border-slate-200 pt-4">
+                            <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5 mb-3">
+                              <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600" />
+                              Section 2 : Check-list intégration
+                            </h4>
+
+                            {/* Section 2 Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {INTEGRATION_FIELDS.map(field => renderChecklistItem(field, rec))}
+                            </div>
+                          </div>
+
+                          {/* Free text field: Commentaire */}
+                          <div className="space-y-1 pt-2">
+                            <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block">
+                              Commentaire
+                            </label>
+                            <textarea
+                              disabled={isReadOnly}
+                              rows={3}
+                              value={rec.commentaires || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { commentaires: e.target.value })}
+                              placeholder="Saisissez ici les commentaires d'intégration, pièces administratives manquantes, etc..."
+                              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all disabled:bg-slate-100"
+                            />
+                          </div>
                         </div>
 
                         {/* E. Boutons de Statut / Action en fin de carte */}
@@ -1080,31 +1383,78 @@ export default function RecruitmentApp({
                             </div>
                           </div>
 
-                          {/* Résumé Checklist (4 colonnes) */}
-                          <div className="space-y-1.5">
-                            <span className="text-[11px] font-bold text-slate-600 block uppercase">Conformité Checklist ({CHECKLIST_FIELDS.length} critères)</span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                              {CHECKLIST_FIELDS.map(f => {
-                                const val = rec.checklist[f.key] || 'N/A';
-                                return (
-                                  <div key={f.key} className="flex items-center justify-between text-xs py-1 px-2.5 bg-slate-50 rounded-lg border border-slate-200/80">
-                                    <span className="text-slate-700 text-[11px] truncate">{f.label}</span>
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                      val === 'Oui' ? 'bg-emerald-100 text-emerald-800' :
-                                      val === 'Non' ? 'bg-rose-100 text-rose-800' :
-                                      'bg-slate-200 text-slate-700'
-                                    }`}>
-                                      {val}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                          {/* Résumé Checklist */}
+                          <div className="space-y-4">
+                            <div>
+                              <span className="text-[11px] font-bold text-purple-700 block uppercase mb-1.5">Section 1 : Entretien</span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {ENTRETIEN_FIELDS.map(f => {
+                                  const rawVal = rec.checklist[f.key];
+                                  const val = typeof rawVal === 'object' && rawVal !== null ? rawVal.value : (rawVal || 'N/A');
+                                  const qui = typeof rawVal === 'object' && rawVal !== null ? rawVal.qui : '';
+                                  const d = typeof rawVal === 'object' && rawVal !== null ? rawVal.date : '';
+                                  return (
+                                    <div key={f.key} className="flex items-center justify-between text-xs py-1.5 px-3 bg-slate-50 rounded-lg border border-slate-200/60">
+                                      <div className="min-w-0 pr-2">
+                                        <span className="text-slate-800 text-[11px] font-bold block truncate" title={f.label}>{f.label}</span>
+                                        {qui && <span className="text-[9px] text-slate-400 font-medium block">Par: {qui} {d ? `le ${formatDateDMY(d)}` : ''}</span>}
+                                      </div>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                        val === 'Oui' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                        val === 'Non' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                                        'bg-slate-100 text-slate-600 border border-slate-200'
+                                      }`}>
+                                        {val}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div>
+                              <span className="text-[11px] font-bold text-emerald-700 block uppercase mb-1.5">Section 2 : Intégration</span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {INTEGRATION_FIELDS.map(f => {
+                                  const rawVal = rec.checklist[f.key];
+                                  const val = typeof rawVal === 'object' && rawVal !== null ? rawVal.value : (rawVal || 'N/A');
+                                  const qui = typeof rawVal === 'object' && rawVal !== null ? rawVal.qui : '';
+                                  const d = typeof rawVal === 'object' && rawVal !== null ? rawVal.date : '';
+                                  return (
+                                    <div key={f.key} className="flex items-center justify-between text-xs py-1.5 px-3 bg-slate-50 rounded-lg border border-slate-200/60">
+                                      <div className="min-w-0 pr-2">
+                                        <span className="text-slate-800 text-[11px] font-bold block truncate" title={f.label}>{f.label}</span>
+                                        {qui && <span className="text-[9px] text-slate-400 font-medium block">Par: {qui} {d ? `le ${formatDateDMY(d)}` : ''}</span>}
+                                      </div>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                        val === 'Oui' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                        val === 'Non' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                                        'bg-slate-100 text-slate-600 border border-slate-200'
+                                      }`}>
+                                        {val}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
 
+                          {rec.commentairesEntretien && (
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase block">Compte rendu d'entretien</span>
+                              <div className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl italic border border-slate-200/60">
+                                « {rec.commentairesEntretien} »
+                              </div>
+                            </div>
+                          )}
+
                           {rec.commentaires && (
-                            <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl italic border border-slate-200/60">
-                              « {rec.commentaires} »
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase block font-semibold text-slate-500">Commentaires d'intégration</span>
+                              <div className="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl italic border border-slate-200/60">
+                                « {rec.commentaires} »
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1118,6 +1468,263 @@ export default function RecruitmentApp({
         )}
 
       </div>
+
+      {/* MODAL: Rappel de pièces jointes e-mail */}
+      {emailReminderModal && emailReminderModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-4 pt-16 sm:pt-24 z-50 animate-fade-in" id="email-attachment-reminder-modal">
+          <div className="bg-white rounded-2xl border border-amber-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-scale-up">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 shrink-0">
+                <Paperclip className="h-5 w-5 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">⚠️ Pièces jointes requises</h3>
+                <p className="text-xs text-slate-500">Rappel avant d'ouvrir votre messagerie</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 text-xs font-bold text-amber-900 leading-relaxed">
+              {emailReminderModal.attachmentReminder}
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Le protocole standard d'e-mail ne permet pas de joindre automatiquement des fichiers locaux. Veuillez ajouter manuellement ces pièces jointes après l'ouverture de votre application de messagerie.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEmailReminderModal(null)}
+                className="px-3.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = emailReminderModal.mailtoUrl;
+                  setEmailReminderModal(null);
+                  showToast("Le client de messagerie a été ouvert avec le modèle pré-rempli.", "success");
+                }}
+                className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                <span>Ouvrir la messagerie</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Choix du type de recrutement */}
+      {isChoiceModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-4 pt-10 sm:pt-16 z-50 overflow-y-auto" id="recruitment-choice-modal">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full flex flex-col max-h-[85vh] animate-scale-up">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 p-6 pb-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-purple-50 text-purple-700 rounded-xl border border-purple-100">
+                  <Plus className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Nouveau Recrutement</h3>
+                  <p className="text-xs text-slate-500">Choisissez comment initier le dossier de recrutement</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChoiceModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-6 pt-2 pb-4 space-y-3 overflow-y-auto flex-1">
+              {/* Option A: Nouvel intérimaire */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChoiceModalOpen(false);
+                  setIsNewCollabModalOpen(true);
+                }}
+                className="w-full p-4 text-left border border-slate-200 hover:border-purple-300 hover:bg-purple-50/20 rounded-xl transition-all flex items-center gap-4 group cursor-pointer"
+              >
+                <div className="p-3 bg-purple-50 group-hover:bg-purple-100 text-purple-600 rounded-xl transition-colors">
+                  <UserPlus className="h-6 w-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-extrabold text-slate-900">Créer un nouvel intérimaire</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Saisir un nouveau profil complet et ouvrir directement sa fiche de recrutement.</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 transition-colors" />
+              </button>
+
+              {/* Option B: Intérimaire déjà inscrit */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChoiceModalOpen(false);
+                  setIsSelectExistingModalOpen(true);
+                }}
+                className="w-full p-4 text-left border border-slate-200 hover:border-purple-300 hover:bg-purple-50/20 rounded-xl transition-all flex items-center gap-4 group cursor-pointer"
+              >
+                <div className="p-3 bg-blue-50 group-hover:bg-blue-100 text-blue-600 rounded-xl transition-colors">
+                  <UserCheck className="h-6 w-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-extrabold text-slate-900">Intérimaire déjà inscrit</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Rechercher parmi les fiches de la Base intérimaires pour lui ouvrir un dossier de recrutement.</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 transition-colors" />
+              </button>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end p-4 border-t border-slate-100 shrink-0 bg-slate-50/50 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setIsChoiceModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Fermer
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Sélectionner un intérimaire déjà inscrit */}
+      {isSelectExistingModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center p-4 pt-12 sm:pt-16 z-50 animate-fade-in" id="recruitment-select-existing-modal">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4 animate-scale-in">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-50 text-blue-700 rounded-xl border border-blue-100">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Sélectionner un intérimaire existant</h3>
+                  <p className="text-xs text-slate-500">Rechercher par nom, prénom, escale, matricule ou poste</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSelectExistingModalOpen(false);
+                  setCollabSearchQuery('');
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Input de recherche */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                autoFocus
+                value={collabSearchQuery}
+                onChange={(e) => setCollabSearchQuery(e.target.value)}
+                placeholder="Rechercher par Nom, Prénom, Escale, Service, Poste, Matricule..."
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all"
+              />
+            </div>
+
+            {/* Résultats de recherche */}
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {collabSearchQuery.trim() ? (
+                matchingCollabsForSelection.length > 0 ? (
+                  matchingCollabsForSelection.map(c => {
+                    const hasActive = recruitments.some(r => r.collaboratorId === c.id && r.status === 'en_cours');
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          handleSelectCollaboratorForRecruitment(c);
+                          setIsSelectExistingModalOpen(false);
+                        }}
+                        className="w-full p-3 text-left hover:bg-slate-50 border border-slate-100 rounded-xl transition-all flex items-center justify-between gap-3 cursor-pointer group"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 text-xs sm:text-sm group-hover:text-blue-600">
+                              {c.firstName} {c.lastName.toUpperCase()}
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 text-[9px] font-bold font-mono text-slate-700 rounded">
+                              {c.escale}
+                            </span>
+                            {c.matricule && (
+                              <span className="text-[9px] font-mono text-slate-400">
+                                #{c.matricule}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                            {c.service} {c.poste ? `• ${c.poste}` : ''}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 flex items-center gap-2">
+                          {hasActive ? (
+                            <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Déjà en cours
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 shadow-2xs">
+                              Sélectionner <ChevronRight className="h-3 w-3" />
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-xs text-slate-500 py-6">
+                    Aucun intérimaire trouvé correspondant à "{collabSearchQuery}"
+                  </div>
+                )
+              ) : (
+                <div className="text-center text-xs text-slate-500 py-6">
+                  Saisissez au moins une lettre pour rechercher parmi les intérimaires enregistrés.
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSelectExistingModalOpen(false);
+                  setIsChoiceModalOpen(true);
+                  setCollabSearchQuery('');
+                }}
+                className="px-3 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+              >
+                Retour
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSelectExistingModalOpen(false);
+                  setCollabSearchQuery('');
+                }}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Nouveau Collaborateur / Intérimaire */}
       {isNewCollabModalOpen && (

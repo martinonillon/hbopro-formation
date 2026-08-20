@@ -1,15 +1,20 @@
 import { RecruitmentRecord, RecruitmentChecklist } from '../types';
 
 export const DEFAULT_CHECKLIST: RecruitmentChecklist = {
+  ficheEntretienRemplie: 'N/A',
   vehicule: 'N/A',
   horaireDecale: 'N/A',
-  controleDossierFormation: 'N/A',
+  verificationAntecedents: 'N/A',
+  controleReferences: 'N/A',
   mailInscription: 'N/A',
+  receptionDossier: 'N/A',
+  envoiLivretAccueil: 'N/A',
   ficheHbo: 'N/A',
   fichePlanete: 'N/A',
-  demandeTca: 'N/A',
+  controleDossierFormation: 'N/A',
   commandeFormation: 'N/A',
-  envoiLivretAccueil: 'N/A',
+  demandeTca: 'N/A',
+  receptionTca: 'N/A',
   miseAuxNormesDossierRh: 'N/A'
 };
 

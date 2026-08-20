@@ -113,17 +113,33 @@ export interface UserAppPermissions {
 // Types pour l'application Recrutement & Parcours d'accueil
 export type IntegrationChecklistValue = 'Oui' | 'Non' | 'N/A';
 
+export interface ChecklistItemDetail {
+  value: IntegrationChecklistValue;
+  qui?: string;
+  date?: string;
+}
+
+export type ChecklistItemType = IntegrationChecklistValue | ChecklistItemDetail;
+
 export interface RecruitmentChecklist {
-  vehicule: IntegrationChecklistValue;
-  horaireDecale: IntegrationChecklistValue;
-  controleDossierFormation: IntegrationChecklistValue;
-  mailInscription: IntegrationChecklistValue;
-  ficheHbo: IntegrationChecklistValue;
-  fichePlanete: IntegrationChecklistValue;
-  demandeTca: IntegrationChecklistValue;
-  commandeFormation: IntegrationChecklistValue;
-  envoiLivretAccueil: IntegrationChecklistValue;
-  miseAuxNormesDossierRh?: IntegrationChecklistValue;
+  // Section 1: Entretien
+  ficheEntretienRemplie?: ChecklistItemType;
+  vehicule: ChecklistItemType;
+  horaireDecale: ChecklistItemType;
+  verificationAntecedents?: ChecklistItemType;
+  controleReferences?: ChecklistItemType;
+
+  // Section 2: Intégration
+  mailInscription: ChecklistItemType;
+  receptionDossier?: ChecklistItemType;
+  envoiLivretAccueil: ChecklistItemType;
+  ficheHbo: ChecklistItemType;
+  fichePlanete: ChecklistItemType;
+  controleDossierFormation: ChecklistItemType;
+  commandeFormation: ChecklistItemType;
+  demandeTca: ChecklistItemType;
+  receptionTca?: ChecklistItemType;
+  miseAuxNormesDossierRh?: ChecklistItemType;
 }
 
 export type RecruitmentStatus = 'en_cours' | 'mise_en_poste' | 'annule';
@@ -137,6 +153,7 @@ export interface RecruitmentRecord {
   dateIntegrationPrevue: string;
   checklist: RecruitmentChecklist;
   commentaires: string;
+  commentairesEntretien?: string;
   status: RecruitmentStatus;
   createdAt: string;
   updatedAt: string;
