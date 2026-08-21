@@ -229,20 +229,44 @@ export default function TrainingLogs({
 
   // XLSX Export
   const handleExportXLSX = () => {
-    const data = sortedLogs.map(log => ({
-      'ID': log.id,
-      'Collaborateur': log.collaboratorName,
-      'Escale': log.escale,
-      'Service': log.service,
-      'Module': log.moduleName,
-      'Formateur': log.formateur,
-      'Type': log.type,
-      'Cycle': log.cycle,
-      'Résultat': log.resultat,
-      'Consigne': log.consigne || 'N/A',
-      'Date Inscription': formatDateFR(log.dateInscription),
-      'Date Validation': log.dateValidation ? formatDateFR(log.dateValidation) : ''
-    }));
+    // Retrieve collaborators list from localStorage
+    const savedCollabsStr = localStorage.getItem('alyzia_collaborators');
+    let collaboratorsList: any[] = [];
+    if (savedCollabsStr) {
+      try {
+        collaboratorsList = JSON.parse(savedCollabsStr);
+      } catch (e) {
+        console.warn("Error parsing alyzia_collaborators", e);
+      }
+    }
+
+    const data = sortedLogs.map(log => {
+      const collaborator = collaboratorsList.find((c: any) => c.id === log.collaboratorId);
+      
+      // Parse collaboratorName as fallback if collaborator details not found
+      const parts = (log.collaboratorName || '').trim().split(' ');
+      const fallbackFirstName = parts[0] || '';
+      const fallbackLastName = parts.slice(1).join(' ') || '';
+
+      const matricule = collaborator?.matricule || '';
+      const lastName = collaborator?.lastName || fallbackLastName;
+      const firstName = collaborator?.firstName || fallbackFirstName;
+
+      return {
+        'Code client': '1371',
+        'Client': "TEMPO'AIR",
+        "Matricule de l'intérimaire": matricule,
+        'Nom': lastName,
+        'Prénom': firstName,
+        'Date début': formatDateFR(log.dateDebut || log.dateInscription),
+        'Date fin': formatDateFR(log.dateFin || log.dateValidation || log.dateInscription),
+        'Heure début 1': log.heureDebut1 || '',
+        'Heure fin 1': log.heureFin1 || '',
+        'Heure début 2': log.heureDebut2 || '',
+        'Heure fin 2': log.heureFin2 || '',
+        'Nom du module': log.moduleName
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -348,7 +372,7 @@ export default function TrainingLogs({
               className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm cursor-pointer"
               id="export-xlsx-btn"
             >
-              <Download className="h-3.5 w-3.5" /> Exporter en XLSX
+              <Download className="h-3.5 w-3.5" /> Export contrats
             </button>
           </div>
         </div>
