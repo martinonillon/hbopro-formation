@@ -23,7 +23,8 @@ export type AppNavId =
   | 'contractGenerator' 
   | 'coverageControl' 
   | 'baseInterimaires'
-  | 'admin';
+  | 'admin'
+  | 'groupOrder';
 
 interface SidebarProps {
   activeNav: AppNavId;
@@ -59,6 +60,13 @@ export const MAIN_NAV_ITEMS: NavItemConfig[] = [
     icon: Clock,
     color: '#57aea6',
     permissionKey: 'absenceTracking'
+  },
+  {
+    id: 'groupOrder',
+    label: 'Commande de groupe',
+    icon: Users,
+    color: '#fbbf24',
+    permissionKey: 'groupOrder'
   },
   {
     id: 'recruitment',

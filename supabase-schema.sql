@@ -109,3 +109,84 @@ ON CONFLICT (id) DO NOTHING;
 
 CREATE POLICY "Allow public storage upload and view" ON storage.objects 
 FOR ALL USING (bucket_id = 'emargements') WITH CHECK (bucket_id = 'emargements');
+
+-- =========================================================
+-- 6. Table des Commandes de Groupe (commandes_groupe)
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.commandes_groupe (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reference text UNIQUE NOT NULL,
+  escale text NOT NULL,
+  client text NOT NULL,
+  service text NOT NULL,
+  poste text NOT NULL,
+  nombre_agents integer NOT NULL,
+  nombre_sessions integer NOT NULL,
+  organisme_formation text,
+  poei boolean NOT NULL DEFAULT false,
+  date_mise_a_disposition date,
+  statut text NOT NULL DEFAULT 'en_cours',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.commandes_groupe;
+ALTER TABLE public.commandes_groupe ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read and write access" ON public.commandes_groupe FOR ALL USING (true) WITH CHECK (true);
+
+-- =========================================================
+-- 7. Table des Candidats de Commande de Groupe (commandes_groupe_candidats)
+-- =========================================================
+CREATE TABLE IF NOT EXISTS public.commandes_groupe_candidats (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  commande_id uuid NOT NULL REFERENCES public.commandes_groupe(id) ON DELETE CASCADE,
+
+  -- Inscription
+  nom text NOT NULL,
+  prenom text NOT NULL,
+  telephone text,
+  email text,
+  escale text NOT NULL,
+  service text NOT NULL,
+  poste text NOT NULL,
+  enregistre_le timestamptz NOT NULL DEFAULT now(),
+  statut text NOT NULL DEFAULT 'en_cours',
+
+  -- Section 1 : pré-qualification téléphonique
+  recruteur_prequal text,
+  date_prequal date,
+  date_convocation date,
+  inscrit_ft boolean,
+  identifiant_ft text,
+  niveau_anglais text,
+  casier_judiciaire_vierge boolean,
+  permis_b_vehicule text,
+  horaires_decales boolean,
+  port_de_charge text,
+  compte_rendu_echange text,
+  points_alerte_prequal text,
+
+  -- Section 2 : check-list entretien
+  recruteur_entretien text,
+  date_entretien date,
+  date_naissance date,
+  lieu_naissance text,
+  confirmation_qualification boolean,
+  disponibilite_formation text,
+  disponibilite_saison text,
+  compte_rendu_entretien text,
+  points_alerte_entretien text,
+  pre_resultat text,
+  resultat text,
+
+  -- Section 3 : check-list intégration (stocké en JSONB pour flexibilité identique à l'app Recrutement)
+  integration_checklist jsonb DEFAULT '{}'::jsonb,
+  commentaires text,
+
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.commandes_groupe_candidats;
+ALTER TABLE public.commandes_groupe_candidats ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read and write access" ON public.commandes_groupe_candidats FOR ALL USING (true) WITH CHECK (true);
+

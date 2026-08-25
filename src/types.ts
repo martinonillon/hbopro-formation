@@ -96,7 +96,8 @@ export type AppKey =
   | 'contractGenerator' 
   | 'coverageControl' 
   | 'baseInterimaires' 
-  | 'admin';
+  | 'admin'
+  | 'groupOrder';
 
 export interface UserAppPermissions {
   formation: AppPermissionLevel;          // 1. App Formation (KPI, Calendrier, Suivi Général, Paye, Facturation, Catalogue)
@@ -108,7 +109,83 @@ export interface UserAppPermissions {
   coverageControl: AppPermissionLevel;    // 7. App Contrôle de couverture
   baseInterimaires?: AppPermissionLevel;  // 8. Base intérimaires
   admin: AppPermissionLevel;              // 9. App Administration
+  groupOrder?: AppPermissionLevel;        // 10. App Commande de groupe
 }
+
+export interface GroupOrderCommand {
+  id: string;
+  reference: string;
+  escale: string;
+  client: string;
+  service: string;
+  poste: string;
+  nombre_agents: number;
+  nombre_agents_recrutes?: number;
+  nombre_sessions: number;
+  organisme_formation?: string;
+  poei: boolean;
+  date_mise_a_disposition?: string;
+  statut: 'en_cours' | 'termine' | 'annule';
+  
+  // Sub-information fields for the 4 tabs
+  administratif_notes?: string;
+  recrutement_notes?: string;
+  suivi_notes?: string;
+  organisme_formation_notes?: string;
+  commentaire_validation?: string;
+  commentaire_mise_en_place?: string;
+
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupOrderCandidate {
+  id: string;
+  commande_id: string;
+  nom: string;
+  prenom: string;
+  telephone?: string;
+  email?: string;
+  escale: string;
+  service: string;
+  poste: string;
+  enregistre_le: string;
+  statut: 'en_cours' | 'convoque' | 'retenu' | 'non_retenu' | 'noshow';
+
+  // Section 1
+  recruteur_prequal?: string;
+  date_prequal?: string;
+  date_convocation?: string;
+  inscrit_ft?: boolean;
+  identifiant_ft?: string;
+  niveau_anglais?: string;
+  casier_judiciaire_vierge?: boolean;
+  permis_b_vehicule?: string;
+  horaires_decales?: boolean;
+  port_de_charge?: string;
+  compte_rendu_echange?: string;
+  points_alerte_prequal?: string;
+
+  // Section 2
+  recruteur_entretien?: string;
+  date_entretien?: string;
+  date_naissance?: string;
+  lieu_naissance?: string;
+  confirmation_qualification?: boolean;
+  disponibilite_formation?: string;
+  disponibilite_saison?: string;
+  compte_rendu_entretien?: string;
+  points_alerte_entretien?: string;
+  pre_resultat?: string;
+  resultat?: string;
+
+  // Section 3
+  integration_checklist?: any;
+  commentaires?: string;
+
+  updated_at?: string;
+}
+
 
 // Types pour l'application Recrutement & Parcours d'accueil
 export type IntegrationChecklistValue = 'Oui' | 'Non' | 'N/A';
@@ -128,6 +205,7 @@ export interface RecruitmentChecklist {
   horaireDecale: ChecklistItemType;
   verificationAntecedents?: ChecklistItemType;
   controleReferences?: ChecklistItemType;
+  portDeCharges?: ChecklistItemType;
 
   // Section 2: Intégration
   mailInscription: ChecklistItemType;
@@ -138,6 +216,8 @@ export interface RecruitmentChecklist {
   controleDossierFormation: ChecklistItemType;
   commandeFormation: ChecklistItemType;
   demandeTca: ChecklistItemType;
+  demandeParking?: ChecklistItemType;
+  commandeDotation?: ChecklistItemType;
   receptionTca?: ChecklistItemType;
   miseAuxNormesDossierRh?: ChecklistItemType;
 }
@@ -151,6 +231,10 @@ export interface RecruitmentRecord {
   recruteur: string;
   dateEntretien: string;
   dateIntegrationPrevue: string;
+  datePreQual?: string;
+  dateDisponibilite?: string;
+  compteRenduEchange?: string;
+  pointsAlerte?: string;
   checklist: RecruitmentChecklist;
   commentaires: string;
   commentairesEntretien?: string;

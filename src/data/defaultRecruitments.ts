@@ -6,6 +6,7 @@ export const DEFAULT_CHECKLIST: RecruitmentChecklist = {
   horaireDecale: 'N/A',
   verificationAntecedents: 'N/A',
   controleReferences: 'N/A',
+  portDeCharges: 'N/A',
   mailInscription: 'N/A',
   receptionDossier: 'N/A',
   envoiLivretAccueil: 'N/A',
@@ -14,6 +15,8 @@ export const DEFAULT_CHECKLIST: RecruitmentChecklist = {
   controleDossierFormation: 'N/A',
   commandeFormation: 'N/A',
   demandeTca: 'N/A',
+  demandeParking: 'N/A',
+  commandeDotation: 'N/A',
   receptionTca: 'N/A',
   miseAuxNormesDossierRh: 'N/A'
 };

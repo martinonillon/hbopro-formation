@@ -34,7 +34,8 @@ import {
   Info,
   Globe,
   Fingerprint,
-  IdCard
+  IdCard,
+  MessageSquare
 } from 'lucide-react';
 import { 
   Collaborator, 
@@ -71,6 +72,7 @@ const ENTRETIEN_FIELDS: Array<{
   { key: 'horaireDecale', label: 'Horaire décalé', icon: Moon },
   { key: 'verificationAntecedents', label: 'Vérification des antécédents', icon: ShieldCheck },
   { key: 'controleReferences', label: 'Contrôle de références', icon: CheckCircle2 },
+  { key: 'portDeCharges', label: 'Port de charges', icon: Briefcase },
 ];
 
 const INTEGRATION_FIELDS: Array<{
@@ -86,6 +88,8 @@ const INTEGRATION_FIELDS: Array<{
   { key: 'controleDossierFormation', label: 'Contrôle dossier formation', icon: GraduationCap },
   { key: 'commandeFormation', label: 'Commande formation', icon: BookOpen },
   { key: 'demandeTca', label: 'Demande de TCA', icon: CreditCard },
+  { key: 'demandeParking', label: 'Demande de parking', icon: Car },
+  { key: 'commandeDotation', label: 'Commande dotation', icon: Briefcase },
   { key: 'receptionTca', label: 'Réception TCA', icon: CreditCard },
 ];
 
@@ -133,6 +137,8 @@ export default function RecruitmentApp({
   // Global search query to filter recruitment dossiers
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEscale, setSelectedEscale] = useState<string | null>(null);
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
 
   // Modals for "+ Nouveau" options
   const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
@@ -250,7 +256,7 @@ export default function RecruitmentApp({
     return counts;
   }, [recruitments, collaborators]);
 
-  // Filtered recruitments based on global search query and selected escale
+  // Filtered recruitments based on global search query, selected escale and creation date range
   const filteredRecruitments = useMemo(() => {
     let result = recruitments;
 
@@ -259,6 +265,24 @@ export default function RecruitmentApp({
         const collab = collaborators.find(c => c.id === rec.collaboratorId);
         const escale = collab?.escale || 'BOD';
         return escale === selectedEscale;
+      });
+    }
+
+    if (filterStartDate) {
+      const start = new Date(filterStartDate);
+      start.setHours(0, 0, 0, 0);
+      result = result.filter(rec => {
+        const created = new Date(rec.createdAt);
+        return created >= start;
+      });
+    }
+
+    if (filterEndDate) {
+      const end = new Date(filterEndDate);
+      end.setHours(23, 59, 59, 999);
+      result = result.filter(rec => {
+        const created = new Date(rec.createdAt);
+        return created <= end;
       });
     }
 
@@ -286,7 +310,7 @@ export default function RecruitmentApp({
              phone.includes(q) ||
              email.includes(q);
     });
-  }, [recruitments, collaborators, searchQuery, selectedEscale]);
+  }, [recruitments, collaborators, searchQuery, selectedEscale, filterStartDate, filterEndDate]);
 
   // Split into active and archived
   const activeRecruitments = useMemo(() => {
@@ -398,6 +422,62 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
       type: 'envoiLivretAccueil',
       mailtoUrl,
       attachmentReminder: "Pensez à ajouter la pièce jointe ! (LDA Intérimaire - PROVINCE)"
+    });
+  };
+
+  const handleBulkInscriptionEmail = () => {
+    const currentDisplayed = activeTab === 'active' ? activeRecruitments : archivedRecruitments;
+    const emailList = currentDisplayed
+      .map(rec => collaborators.find(c => c.id === rec.collaboratorId)?.email || '')
+      .filter(email => email.trim() !== '');
+
+    if (emailList.length === 0) {
+      showToast("Aucune adresse e-mail n'a été renseignée pour les fiches actuellement affichées.", "warning");
+      return;
+    }
+
+    const subject = "[hubjob] 🚀 Félicitations ! Votre candidature est retenue";
+    const body = `Bonjour,
+
+Bonne nouvelle : votre candidature est retenue ! Félicitations ! 🎉
+
+📁 Constitution de votre dossier
+
+Pour finaliser votre inscription et valider votre intégration, nous avons besoin des documents suivants :
+
+- Fiche de renseignement complétée et signée
+- CV à jour
+- Pièce d’identité en cours de validité (copie couleur et recto/verso) :
+  * Ressortissants français : Carte Nationale d’Identité (CNI) ou Passeport.
+  * Ressortissants de l’Union Européenne : Carte Nationale d’Identité (CNI) ou Passeport ou Carte de séjour.
+  * Autres ressortissants : Passeport et Carte de séjour ou de résident.
+- Attestation de carte vitale
+- Permis de conduire (copie couleur et recto/verso)
+- Carte grise (copie couleur et recto) :
+  * Si la carte grise n’est pas à votre nom, joindre une attestation d’assurance mentionnant votre nom.
+- Justificatif de domicile de moins de 3 mois :
+  * Facture d’eau, d’électricité, de gaz, de téléphone, quittance de loyer datant de moins de 3 mois.
+  * Si le justificatif n’est pas à votre nom, joindre une attestation sur l’honneur de la personne vous hébergeant ainsi qu’une copie de sa pièce d’identité.
+- Relevé d’identité bancaire (RIB)
+- Extrait du casier judiciaire (bulletin n°3) datant de moins de 3 mois :
+  * + casier judiciaire du pays d’origine si réside depuis moins de 3 ans en France
+  * Possibilité de faire la demande en ligne : https://casier-judiciaire.justice.gouv.fr/pages/accueil.xhtml
+- 1 photo d’identité (couleur et de bonne qualité, sur fond blanc, visage dégagé)
+- Fiche de dotation uniforme remplie
+- Dossier de formation Aéro complet
+
+Nous vous remercions de bien vouloir nous envoyer ces documents par retour de mail (à recrutement.aero@hubjob.fr), dans les plus brefs délais.
+
+Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre question.
+Nous avons hâte de vous compter parmi nous !`;
+
+    const mailtoUrl = `mailto:${encodeURIComponent(emailList.join(','))}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    setEmailReminderModal({
+      isOpen: true,
+      type: 'mailInscription',
+      mailtoUrl,
+      attachmentReminder: "Pensez à ajouter les pièces jointes pour tous les candidats ! (Fiche de renseignement HBO, Commande dotation)"
     });
   };
 
@@ -742,6 +822,7 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
       horaireDecale: { value: 'Oui', qui: 'Sys', date: sysDate },
       verificationAntecedents: { value: 'Oui', qui: 'Sys', date: sysDate },
       controleReferences: { value: 'Oui', qui: 'Sys', date: sysDate },
+      portDeCharges: { value: 'Oui', qui: 'Sys', date: sysDate },
       mailInscription: { value: 'Oui', qui: 'Sys', date: sysDate },
       receptionDossier: { value: 'Oui', qui: 'Sys', date: sysDate },
       envoiLivretAccueil: { value: 'Oui', qui: 'Sys', date: sysDate },
@@ -750,6 +831,8 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
       controleDossierFormation: { value: 'Oui', qui: 'Sys', date: sysDate },
       commandeFormation: { value: 'Oui', qui: 'Sys', date: sysDate },
       demandeTca: { value: 'Oui', qui: 'Sys', date: sysDate },
+      demandeParking: { value: 'Oui', qui: 'Sys', date: sysDate },
+      commandeDotation: { value: 'Oui', qui: 'Sys', date: sysDate },
       receptionTca: { value: 'Oui', qui: 'Sys', date: sysDate },
       miseAuxNormesDossierRh: { value: 'Oui', qui: 'Sys', date: sysDate }
     };
@@ -766,6 +849,7 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
       horaireDecale: 'N/A',
       verificationAntecedents: 'N/A',
       controleReferences: 'N/A',
+      portDeCharges: 'N/A',
       mailInscription: 'N/A',
       receptionDossier: 'N/A',
       envoiLivretAccueil: 'N/A',
@@ -774,6 +858,8 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
       controleDossierFormation: 'N/A',
       commandeFormation: 'N/A',
       demandeTca: 'N/A',
+      demandeParking: 'N/A',
+      commandeDotation: 'N/A',
       receptionTca: 'N/A',
       miseAuxNormesDossierRh: 'N/A'
     };
@@ -923,6 +1009,17 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
           {/* Bouton + Nouveau Intérimaire & Tab Switcher */}
           <div className="flex items-center gap-2.5 justify-between md:justify-end flex-wrap sm:flex-nowrap">
             
+            {/* Action de masse: Envoi mail d'inscription */}
+            <button
+              type="button"
+              onClick={handleBulkInscriptionEmail}
+              className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-2 shrink-0"
+              title="Envoyer un mail d'inscription à tous les candidats visibles"
+            >
+              <Mail className="h-4 w-4" />
+              <span>Envoi mail d'inscription</span>
+            </button>
+
             {/* Tab switch : En cours vs Archivés */}
             <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 text-xs font-bold">
               <button
@@ -966,45 +1063,81 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
           </div>
         </div>
 
-        {/* Filtres rapides par escale */}
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mr-1 block sm:inline">
-            Escale :
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {ESCALE_FILTERS.map((f) => {
-              const isActive = selectedEscale === f.code;
-              const count = escaleCounts[f.code] || 0;
-              return (
-                <button
-                  key={f.code}
-                  type="button"
-                  onClick={() => {
-                    setSelectedEscale(isActive ? null : f.code);
-                    setActiveTab('active');
-                  }}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                    isActive ? f.activeClass : f.inactiveClass
-                  }`}
-                >
-                  {f.label} ({count})
-                </button>
-              );
-            })}
+        {/* Filtres rapides par escale & Période d'enregistrement */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-3 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mr-1 block sm:inline">
+              Escale :
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {ESCALE_FILTERS.map((f) => {
+                const isActive = selectedEscale === f.code;
+                const count = escaleCounts[f.code] || 0;
+                return (
+                  <button
+                    key={f.code}
+                    type="button"
+                    onClick={() => {
+                      setSelectedEscale(isActive ? null : f.code);
+                      setActiveTab('active');
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                      isActive ? f.activeClass : f.inactiveClass
+                    }`}
+                  >
+                    {f.label} ({count})
+                  </button>
+                );
+              })}
 
-            <button
-              type="button"
-              onClick={() => setSelectedEscale(null)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                selectedEscale === null
-                  ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 active:scale-98'
-              }`}
-              disabled={selectedEscale === null}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>Réinitialiser</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setSelectedEscale(null)}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  selectedEscale === null
+                    ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300 active:scale-98'
+                }`}
+                disabled={selectedEscale === null}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Réinitialiser</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 block sm:inline">
+              Enregistré du :
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] focus:outline-hidden"
+              />
+              <span className="text-xs text-slate-400 font-bold">au</span>
+              <input
+                type="date"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
+                className="px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0062FF] focus:outline-hidden"
+              />
+            </div>
+            {(filterStartDate || filterEndDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterStartDate('');
+                  setFilterEndDate('');
+                }}
+                className="p-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                title="Effacer le filtre de dates"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1054,8 +1187,8 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                   if (typeof v === 'object' && v !== null) return (v as any).value === 'Oui';
                   return false;
                 }).length;
-                const countTotal = 15;
-                const percentDone = Math.round((countOui / countTotal) * 105) > 100 ? 100 : Math.round((countOui / countTotal) * 100);
+                const countTotal = ENTRETIEN_FIELDS.length + INTEGRATION_FIELDS.length;
+                const percentDone = Math.round((countOui / countTotal) * 100);
                 const isExpanded = expandedCardIds.has(rec.id);
 
                 const getChecklistVal = (key: keyof RecruitmentChecklist) => {
@@ -1139,63 +1272,68 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
 
                       {/* Progression, Actions & Chevron de déploiement */}
                       <div className="flex items-center gap-2.5 self-end md:self-auto shrink-0">
-                        {/* 4 Icônes de suivi */}
-                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          {/* Mail d'inscription */}
-                          <div className="group relative">
-                            <div className={`p-1.5 rounded-lg border transition-all ${
-                              getChecklistVal('mailInscription') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                              getChecklistVal('mailInscription') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                              'bg-slate-850 text-slate-500 border-slate-700'
-                            }`} title="Mail d'inscription">
-                              <Mail className="h-3.5 w-3.5" />
+                        {/* 4 Icônes de suivi + Date d'enregistrement */}
+                        <div className="flex flex-col items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            {/* Mail d'inscription */}
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('mailInscription') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('mailInscription') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Mail d'inscription">
+                                <Mail className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                                Mail d'inscription : {getChecklistVal('mailInscription')}
+                              </div>
                             </div>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
-                              Mail d'inscription : {getChecklistVal('mailInscription')}
-                            </div>
-                          </div>
 
-                          {/* Fiche Planete */}
-                          <div className="group relative">
-                            <div className={`p-1.5 rounded-lg border transition-all ${
-                              getChecklistVal('fichePlanete') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                              getChecklistVal('fichePlanete') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                              'bg-slate-850 text-slate-500 border-slate-700'
-                            }`} title="Fiche Planete">
-                              <Globe className="h-3.5 w-3.5" />
+                            {/* Fiche Planete */}
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('fichePlanete') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('fichePlanete') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Fiche Planete">
+                                <Globe className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                                Fiche Planete : {getChecklistVal('fichePlanete')}
+                              </div>
                             </div>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
-                              Fiche Planete : {getChecklistVal('fichePlanete')}
-                            </div>
-                          </div>
 
-                          {/* Fiche HBO */}
-                          <div className="group relative">
-                            <div className={`p-1.5 rounded-lg border transition-all ${
-                              getChecklistVal('ficheHbo') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                              getChecklistVal('ficheHbo') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                              'bg-slate-850 text-slate-500 border-slate-700'
-                            }`} title="Fiche HBO">
-                              <Fingerprint className="h-3.5 w-3.5" />
+                            {/* Fiche HBO */}
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('ficheHbo') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('ficheHbo') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Fiche HBO">
+                                <Fingerprint className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                                Fiche HBO : {getChecklistVal('ficheHbo')}
+                              </div>
                             </div>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
-                              Fiche HBO : {getChecklistVal('ficheHbo')}
-                            </div>
-                          </div>
 
-                          {/* Demande de TCA */}
-                          <div className="group relative">
-                            <div className={`p-1.5 rounded-lg border transition-all ${
-                              getChecklistVal('demandeTca') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                              getChecklistVal('demandeTca') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
-                              'bg-slate-850 text-slate-500 border-slate-700'
-                            }`} title="Demande de TCA">
-                              <IdCard className="h-3.5 w-3.5" />
-                            </div>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
-                              Demande de TCA : {getChecklistVal('demandeTca')}
+                            {/* Demande de TCA */}
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('demandeTca') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('demandeTca') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Demande de TCA">
+                                <IdCard className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-950 border border-slate-800 text-white text-[10px] py-1 px-2 rounded-md whitespace-nowrap shadow-md z-30 font-semibold pointer-events-none">
+                                Demande de TCA : {getChecklistVal('demandeTca')}
+                              </div>
                             </div>
                           </div>
+                          <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">
+                            Enregistré le : {formatDateFR(rec.createdAt)}
+                          </span>
                         </div>
 
                         <div className="bg-slate-800/90 border border-slate-700 px-2.5 py-1 rounded-xl flex items-center gap-2">
@@ -1248,8 +1386,8 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                     {isExpanded && (
                       <div className="p-4 sm:p-5 space-y-4 border-t border-slate-100 bg-white">
                         
-                        {/* B. Informations du Recrutement (Recruteur, Date Entretien, Date Intégration) */}
-                        <div className="bg-slate-50/90 rounded-xl p-3.5 border border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* B. Informations du Recrutement (Recruteur, Date Pré-qual, Date Entretien, Date Disponibilité, Date Intégration) */}
+                        <div className="bg-slate-50/90 rounded-xl p-3.5 border border-slate-200/80 grid grid-cols-1 sm:grid-cols-5 gap-3">
                           
                           <div>
                             <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">
@@ -1260,14 +1398,27 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                               disabled={isReadOnly}
                               value={rec.recruteur}
                               onChange={(e) => onUpdateRecruitment(rec.id, { recruteur: e.target.value })}
-                              placeholder="Nom du chargé de recrutement..."
+                              placeholder="Nom..."
                               className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:border-[#0062FF] focus:outline-hidden disabled:bg-slate-100"
                             />
                           </div>
 
                           <div>
                             <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider flex items-center gap-1">
-                              <Calendar className="h-3 w-3 text-purple-600" /> Date de l'entretien
+                              <Calendar className="h-3 w-3 text-blue-600" /> Date pré-qual
+                            </label>
+                            <input
+                              type="date"
+                              disabled={isReadOnly}
+                              value={rec.datePreQual || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { datePreQual: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:border-[#0062FF] focus:outline-hidden disabled:bg-slate-100"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-purple-600" /> Date entretien
                             </label>
                             <input
                               type="date"
@@ -1280,7 +1431,20 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
 
                           <div>
                             <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider flex items-center gap-1">
-                              <Calendar className="h-3 w-3 text-emerald-600" /> Date d'intégration prévue
+                              <Calendar className="h-3 w-3 text-amber-600" /> Date dispo
+                            </label>
+                            <input
+                              type="date"
+                              disabled={isReadOnly}
+                              value={rec.dateDisponibilite || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { dateDisponibilite: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:border-[#0062FF] focus:outline-hidden disabled:bg-slate-100"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-emerald-600" /> Date intégration
                             </label>
                             <input
                               type="date"
@@ -1292,12 +1456,51 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                           </div>
                         </div>
 
-                        {/* C. Split Checklists (Section 1: Entretien, Section 2: Intégration) */}
+                        {/* C. Split Checklists (Section 1: Pré-qualification, Section 2: Entretien, Section 3: Intégration) */}
                         <div className="space-y-6">
+                          
+                          {/* Section 1 : Pré-qualification */}
+                          <div className="border-b border-slate-100 pb-4">
+                            <h4 className="text-sm font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5 mb-3">
+                              <MessageSquare className="h-4.5 w-4.5 text-blue-600" />
+                              Section 1 : Pré-qualification téléphonique
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block">
+                                  Compte rendu de l'échange
+                                </label>
+                                <textarea
+                                  disabled={isReadOnly}
+                                  rows={2}
+                                  value={rec.compteRenduEchange || ''}
+                                  onChange={(e) => onUpdateRecruitment(rec.id, { compteRenduEchange: e.target.value })}
+                                  placeholder="Saisissez ici le résumé de l'échange téléphonique de pré-qualification..."
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all disabled:bg-slate-100"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 block text-rose-700">
+                                  Éventuels points d'alerte
+                                </label>
+                                <textarea
+                                  disabled={isReadOnly}
+                                  rows={2}
+                                  value={rec.pointsAlerte || ''}
+                                  onChange={(e) => onUpdateRecruitment(rec.id, { pointsAlerte: e.target.value })}
+                                  placeholder="Signalez ici d'éventuels points d'attention ou alertes concernant le profil..."
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0062FF] focus:ring-2 focus:ring-blue-100 focus:outline-hidden transition-all disabled:bg-slate-100"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Section 2 : Entretien */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
                             <h4 className="text-sm font-black uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
                               <ShieldCheck className="h-4.5 w-4.5 text-purple-600" />
-                              Section 1 : Check-list entretien
+                              Section 2 : Check-list entretien
                             </h4>
 
                             {!isReadOnly && (
@@ -1322,7 +1525,7 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                             )}
                           </div>
 
-                          {/* Section 1 Grid */}
+                          {/* Section 2 Grid */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             {ENTRETIEN_FIELDS.map(field => renderChecklistItem(field, rec))}
                           </div>
@@ -1345,10 +1548,10 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                           <div className="border-t border-slate-200 pt-4">
                             <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5 mb-3">
                               <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600" />
-                              Section 2 : Check-list intégration
+                              Section 3 : Check-list intégration
                             </h4>
 
-                            {/* Section 2 Grid */}
+                            {/* Section 3 Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                               {INTEGRATION_FIELDS.map(field => renderChecklistItem(field, rec))}
                             </div>
@@ -1538,14 +1741,22 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                       {/* Détail Archives déployé */}
                       {isExpanded && (
                         <div className="p-4 sm:p-5 space-y-4 bg-white border-t border-slate-100">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs">
                             <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
                               <span className="text-[10px] text-slate-400 font-bold uppercase block">Recruteur</span>
                               <span className="font-semibold text-slate-800">{rec.recruteur || 'Non renseigné'}</span>
                             </div>
                             <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase block">Date pré-qual</span>
+                              <span className="font-semibold text-slate-800">{formatDateDMY(rec.datePreQual)}</span>
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
                               <span className="text-[10px] text-slate-400 font-bold uppercase block">Date entretien</span>
                               <span className="font-semibold text-slate-800">{formatDateDMY(rec.dateEntretien)}</span>
+                            </div>
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase block">Date dispo</span>
+                              <span className="font-semibold text-slate-800">{formatDateDMY(rec.dateDisponibilite)}</span>
                             </div>
                             <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80">
                               <span className="text-[10px] text-slate-400 font-bold uppercase block">Intégration</span>
@@ -1553,10 +1764,32 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                             </div>
                           </div>
 
+                          {/* Section 1 : Pré-qualification exchange */}
+                          {(rec.compteRenduEchange || rec.pointsAlerte) && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-b border-slate-100 pb-3">
+                              {rec.compteRenduEchange && (
+                                <div className="space-y-1">
+                                  <span className="text-[10px] text-blue-700 font-bold uppercase block">Section 1 : Compte rendu de l'échange</span>
+                                  <div className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl italic border border-slate-200/60">
+                                    « {rec.compteRenduEchange} »
+                                  </div>
+                                </div>
+                              )}
+                              {rec.pointsAlerte && (
+                                <div className="space-y-1">
+                                  <span className="text-[10px] text-rose-700 font-bold uppercase block">Section 1 : Éventuels points d'alerte</span>
+                                  <div className="text-xs text-rose-700 bg-rose-50/50 p-2.5 rounded-xl italic border border-rose-200">
+                                    « {rec.pointsAlerte} »
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Résumé Checklist */}
                           <div className="space-y-4">
                             <div>
-                              <span className="text-[11px] font-bold text-purple-700 block uppercase mb-1.5">Section 1 : Entretien</span>
+                              <span className="text-[11px] font-bold text-purple-700 block uppercase mb-1.5">Section 2 : Entretien</span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                 {ENTRETIEN_FIELDS.map(f => {
                                   const rawVal = rec.checklist[f.key];
@@ -1583,7 +1816,7 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
                             </div>
 
                             <div>
-                              <span className="text-[11px] font-bold text-emerald-700 block uppercase mb-1.5">Section 2 : Intégration</span>
+                              <span className="text-[11px] font-bold text-emerald-700 block uppercase mb-1.5">Section 3 : Intégration</span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                 {INTEGRATION_FIELDS.map(f => {
                                   const rawVal = rec.checklist[f.key];

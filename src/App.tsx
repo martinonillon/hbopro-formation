@@ -34,7 +34,7 @@ import {
   Info,
   X
 } from 'lucide-react';
-import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact, RegistrationRequest, DEFAULT_PROVISIONAL_PASSWORD, RecruitmentRecord } from './types';
+import { Collaborator, TrainingLog, TrainingModule, RealTimeEvent, AppUser, AppPermissionLevel, UserAppPermissions, Contact, RegistrationRequest, DEFAULT_PROVISIONAL_PASSWORD, RecruitmentRecord, GroupOrderCommand } from './types';
 import { RAW_MODULES, getCategoryFromName, ESCALES, SERVICES, FORMATEURS, TYPES, CYCLES } from './data/modulesData';
 import { INITIAL_COLLABORATORS, INITIAL_TRAINING_LOGS } from './data/collaboratorsData';
 import { DEFAULT_ADMIN_USER, INITIAL_USERS, normalizeUserPermissions, DEFAULT_READONLY_PERMISSIONS } from './data/usersData';
@@ -64,6 +64,7 @@ import LoginScreen from './components/LoginScreen';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
 import AdminManagement from './components/AdminManagement';
 import ContactsDirectory from './components/ContactsDirectory';
+import CommandeGroupeApp from './components/CommandeGroupeApp';
 import Sidebar, { AppNavId } from './components/Sidebar';
 import FormationSubNav from './components/FormationSubNav';
 import { getFormattedBuildDate } from './utils/buildInfo';
@@ -111,6 +112,9 @@ export default function App() {
   // Recrutements & Parcours d'intégration
   const [recruitments, setRecruitments] = useState<RecruitmentRecord[]>(INITIAL_RECRUITMENTS);
 
+  // Commandes de groupe
+  const [commandes, setCommandes] = useState<GroupOrderCommand[]>([]);
+
   // Sauvegarde automatique des recrutements dans le localStorage
   useEffect(() => {
     try {
@@ -119,6 +123,15 @@ export default function App() {
       console.warn("Erreur écriture hubstation_recruitments localStorage", e);
     }
   }, [recruitments]);
+
+  // Sauvegarde automatique des commandes de groupe dans le localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('hubstation_commandes_groupe', JSON.stringify(commandes));
+    } catch (e) {
+      console.warn("Erreur écriture hubstation_commandes_groupe localStorage", e);
+    }
+  }, [commandes]);
 
   // Handlers pour l'application Recrutement
   const handleAddRecruitment = (recData: Omit<RecruitmentRecord, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -150,6 +163,43 @@ export default function App() {
     setRecruitments(prev => prev.filter(r => r.id !== recId));
     deleteItemFromFirestore('recruitments', recId);
     deleteFromSupabase('recruitments', recId, handleSupabaseWriteError);
+  };
+
+  // Handlers pour l'application Commande de groupe
+  const handleAddCommande = (cmdData: Omit<GroupOrderCommand, 'id' | 'created_at' | 'updated_at'>) => {
+    const newRecord: GroupOrderCommand = {
+      ...cmdData,
+      id: `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    setCommandes(prev => [newRecord, ...prev]);
+    saveItemToFirestore('commandes_groupe', newRecord);
+    saveToSupabase('commandes_groupe', newRecord, handleSupabaseWriteError);
+    addEvent(`Nouvelle commande de groupe créée : ${newRecord.reference}`, 'success');
+  };
+
+  const handleUpdateCommande = (cmdId: string, updates: Partial<GroupOrderCommand>) => {
+    setCommandes(prev => prev.map(c => {
+      if (c.id === cmdId) {
+        const updated = { ...c, ...updates, updated_at: new Date().toISOString() };
+        saveItemToFirestore('commandes_groupe', updated);
+        saveToSupabase('commandes_groupe', updated, handleSupabaseWriteError);
+        return updated;
+      }
+      return c;
+    }));
+    addEvent(`Commande de groupe mise à jour`, 'info');
+  };
+
+  const handleDeleteCommande = (cmdId: string) => {
+    const cmdToDelete = commandes.find(c => c.id === cmdId);
+    setCommandes(prev => prev.filter(c => c.id !== cmdId));
+    deleteItemFromFirestore('commandes_groupe', cmdId);
+    deleteFromSupabase('commandes_groupe', cmdId, handleSupabaseWriteError);
+    if (cmdToDelete) {
+      addEvent(`Commande de groupe supprimée : ${cmdToDelete.reference}`, 'warning');
+    }
   };
 
   // Demandes d'inscription (Workflow Première Connexion)
@@ -202,6 +252,7 @@ export default function App() {
     | 'operationsTracking'
     | 'absenceTracking'
     | 'contractGenerator'
+    | 'groupOrder'
   >('home');
   const [calendarInitialDate, setCalendarInitialDate] = useState<string | null>(null);
   const [calendarInitialNumSession, setCalendarInitialNumSession] = useState<string | null>(null);
@@ -240,6 +291,7 @@ export default function App() {
     if (activeTab === 'operationsTracking') return 'operationsTracking';
     if (activeTab === 'absenceTracking') return 'absenceTracking';
     if (activeTab === 'contractGenerator') return 'contractGenerator';
+    if (activeTab === 'groupOrder') return 'groupOrder';
     return 'home';
   };
 
@@ -268,6 +320,8 @@ export default function App() {
       setActiveTab('absenceTracking');
     } else if (navId === 'contractGenerator') {
       setActiveTab('contractGenerator');
+    } else if (navId === 'groupOrder') {
+      setActiveTab('groupOrder');
     }
   };
 
@@ -294,6 +348,8 @@ export default function App() {
     } else if (activeTab === 'absenceTracking' && perms.absenceTracking === 'Masquer') {
       setActiveTab('home');
     } else if (activeTab === 'contractGenerator' && perms.contractGenerator === 'Masquer') {
+      setActiveTab('home');
+    } else if (activeTab === 'groupOrder' && perms.groupOrder === 'Masquer') {
       setActiveTab('home');
     }
   }, [currentUser, activeTab]);
@@ -587,6 +643,7 @@ export default function App() {
     const unsubSupaContacts = syncSupabaseTable('contacts', setContacts, [], handleSyncError);
     const unsubSupaRegistrationReqs = syncSupabaseTable('registration_requests', setRegistrationRequests, [], handleSyncError);
     const unsubSupaRecruitments = syncSupabaseTable('recruitments', setRecruitments, [], handleSyncError);
+    const unsubSupaCommandes = syncSupabaseTable('commandes_groupe', setCommandes, [], handleSyncError);
 
     // Fallback Firestore real-time sync
     const unsubCollabs = syncCollection('collaborators', setCollaborators, []);
@@ -603,6 +660,7 @@ export default function App() {
     const unsubContacts = syncCollection('contacts', setContacts, []);
     const unsubRegistrationReqs = syncCollection('registration_requests', setRegistrationRequests, []);
     const unsubRecruitments = syncCollection('recruitments', setRecruitments, []);
+    const unsubCommandes = syncCollection('commandes_groupe', setCommandes, []);
 
     return () => {
       unsubSupaCollabs();
@@ -612,6 +670,7 @@ export default function App() {
       unsubSupaContacts();
       unsubSupaRegistrationReqs();
       unsubSupaRecruitments();
+      unsubSupaCommandes();
       unsubCollabs();
       unsubLogs();
       unsubModules();
@@ -619,6 +678,7 @@ export default function App() {
       unsubContacts();
       unsubRegistrationReqs();
       unsubRecruitments();
+      unsubCommandes();
     };
   }, []);
 
@@ -2784,6 +2844,18 @@ export default function App() {
                   onBackToHome={() => setActiveTab('home')}
                   isReadOnly={userPerms.rhGenerator === 'Lecture'}
                   onOpenModeOp={() => setActiveModeOp('rhGenerator')}
+                />
+              )}
+
+              {activeTab === 'groupOrder' && userPerms.groupOrder !== 'Masquer' && (
+                <CommandeGroupeApp 
+                  commandes={commandes}
+                  collaborators={collaborators}
+                  onAddCommande={handleAddCommande}
+                  onUpdateCommande={handleUpdateCommande}
+                  onDeleteCommande={handleDeleteCommande}
+                  isReadOnly={userPerms.groupOrder === 'Lecture'}
+                  onOpenModeOp={() => setActiveModeOp('groupOrder')}
                 />
               )}
 

@@ -22,6 +22,7 @@ export const ALL_FULL_PERMISSIONS: UserAppPermissions = {
   coverageControl: 'Écriture',
   baseInterimaires: 'Écriture',
   admin: 'Écriture',
+  groupOrder: 'Écriture',
 };
 
 export const DEFAULT_READONLY_PERMISSIONS: UserAppPermissions = {
@@ -34,6 +35,7 @@ export const DEFAULT_READONLY_PERMISSIONS: UserAppPermissions = {
   coverageControl: 'Lecture',
   baseInterimaires: 'Lecture',
   admin: 'Masquer',
+  groupOrder: 'Lecture',
 };
 
 export const DEFAULT_ADMIN_USER: AppUser = {
@@ -70,6 +72,7 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
   const coverageCandidate = rawPerms.coverageControl || 'Lecture';
   const baseInterimairesCandidate = rawPerms.baseInterimaires || rawPerms.collaborators || rawPerms.formation || 'Lecture';
   const adminCandidate = rawPerms.admin || 'Masquer';
+  const groupOrderCandidate = rawPerms.groupOrder || 'Écriture';
 
   const validatePerm = (val: any, fallback: AppPermissionLevel): AppPermissionLevel => {
     if (val === 'Écriture' || val === 'Lecture' || val === 'Masquer') return val;
@@ -86,6 +89,7 @@ export function normalizeUserPermissions(rawPerms: any): UserAppPermissions {
     coverageControl: validatePerm(coverageCandidate, 'Lecture'),
     baseInterimaires: validatePerm(baseInterimairesCandidate, 'Lecture'),
     admin: validatePerm(adminCandidate, 'Masquer'),
+    groupOrder: validatePerm(groupOrderCandidate, 'Écriture'),
   };
 }
 
@@ -206,6 +210,15 @@ export const APP_DEFINITIONS: Record<AppKey, AppDefinition> = {
     gradient: 'linear-gradient(135deg, #6d72db 0%, #4338ca 100%)',
     icon: Shield,
   },
+  groupOrder: {
+    key: 'groupOrder',
+    label: 'App Commande de groupe',
+    subLabel: 'Suivre les demandes de recrutement groupées des clients par escale.',
+    description: 'Suivi des commandes de groupe clients, affectations d\'intérimaires et suivi logistique de formation.',
+    includedTabs: ['Suivi global', 'Journal de bord', 'Dossier administratif'],
+    gradient: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+    icon: Users,
+  },
 };
 
 export const APP_KEYS: AppKey[] = [
@@ -217,6 +230,7 @@ export const APP_KEYS: AppKey[] = [
   'contractGenerator',
   'coverageControl',
   'baseInterimaires',
-  'admin'
+  'admin',
+  'groupOrder'
 ];
 
