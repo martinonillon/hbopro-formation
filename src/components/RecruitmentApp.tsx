@@ -147,6 +147,7 @@ export default function RecruitmentApp({
 
   // New Collaborator Modal State
   const [isNewCollabModalOpen, setIsNewCollabModalOpen] = useState(false);
+  const [isSubmittingNewCollab, setIsSubmittingNewCollab] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [newCollabData, setNewCollabData] = useState({
     firstName: '',
@@ -184,10 +185,32 @@ export default function RecruitmentApp({
     setShowTransitionModal(true);
   };
 
+  // Helper to safely resolve collaborator without ID-collision hijacking
+  const getCollabForRecord = (rec: RecruitmentRecord | null | undefined): Collaborator | null => {
+    if (!rec) return null;
+    const collab = collaborators.find(c => c.id === rec.collaboratorId);
+    if (!collab) return null;
+    
+    // Safety check: If record has a collaboratorName, verify the found collaborator genuinely matches
+    if (rec.collaboratorName && collab.lastName) {
+      const recNorm = rec.collaboratorName.toLowerCase().trim();
+      const collabLastNorm = collab.lastName.toLowerCase().trim();
+      const collabFirstNorm = (collab.firstName || '').toLowerCase().trim();
+      
+      const lastMatch = collabLastNorm.length >= 2 && recNorm.includes(collabLastNorm);
+      const firstMatch = collabFirstNorm.length >= 2 && recNorm.includes(collabFirstNorm);
+      
+      if (!lastMatch && !firstMatch) {
+        return null;
+      }
+    }
+    return collab;
+  };
+
   // Option "Oui": prefill collaborator and show edit form modal
   const handleTransitionOptionOui = () => {
     if (!activeTransitionRecruitment) return;
-    const collab = collaborators.find(c => c.id === activeTransitionRecruitment.collaboratorId);
+    const collab = getCollabForRecord(activeTransitionRecruitment);
     if (collab) {
       setCollabEditFormData({ ...collab });
     } else {
@@ -195,13 +218,13 @@ export default function RecruitmentApp({
         id: activeTransitionRecruitment.collaboratorId || '',
         firstName: activeTransitionRecruitment.collaboratorName?.split(' ')[0] || '',
         lastName: activeTransitionRecruitment.collaboratorName?.split(' ').slice(1).join(' ') || '',
-        email: '',
-        phone: '',
-        escale: 'BOD',
-        service: 'PISTE',
-        poste: '',
+        email: activeTransitionRecruitment.email || '',
+        phone: activeTransitionRecruitment.phone || '',
+        escale: activeTransitionRecruitment.escale || 'BOD',
+        service: activeTransitionRecruitment.service || 'PISTE',
+        poste: activeTransitionRecruitment.poste || '',
         coefficient: '',
-        matricule: '',
+        matricule: activeTransitionRecruitment.matricule || '',
         avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?w=150&auto=format&fit=crop&q=80`
       });
     }
@@ -243,27 +266,37 @@ export default function RecruitmentApp({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  // Deduplicate recruitments by unique record ID
+  const uniqueRecruitments = useMemo(() => {
+    const seen = new Set<string>();
+    return recruitments.filter(r => {
+      if (!r || !r.id || seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  }, [recruitments]);
+
   // Count of "en_cours" dossiers for each escale
   const escaleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    recruitments.forEach(rec => {
+    uniqueRecruitments.forEach(rec => {
       if (rec.status === 'en_cours') {
-        const collab = collaborators.find(c => c.id === rec.collaboratorId);
-        const escale = collab?.escale || 'BOD';
+        const collab = getCollabForRecord(rec);
+        const escale = rec.escale || collab?.escale || 'BOD';
         counts[escale] = (counts[escale] || 0) + 1;
       }
     });
     return counts;
-  }, [recruitments, collaborators]);
+  }, [uniqueRecruitments, collaborators]);
 
   // Filtered recruitments based on global search query, selected escale and creation date range
   const filteredRecruitments = useMemo(() => {
-    let result = recruitments;
+    let result = uniqueRecruitments;
 
     if (selectedEscale) {
       result = result.filter(rec => {
-        const collab = collaborators.find(c => c.id === rec.collaboratorId);
-        const escale = collab?.escale || 'BOD';
+        const collab = getCollabForRecord(rec);
+        const escale = rec.escale || collab?.escale || 'BOD';
         return escale === selectedEscale;
       });
     }
@@ -289,16 +322,16 @@ export default function RecruitmentApp({
     const q = searchQuery.toLowerCase().trim();
     if (!q) return result;
     return result.filter(rec => {
-      const collab = collaborators.find(c => c.id === rec.collaboratorId);
+      const collab = getCollabForRecord(rec);
       const nom = (collab?.lastName || '').toLowerCase();
       const prenom = (collab?.firstName || '').toLowerCase();
       const displayName = (rec.collaboratorName || '').toLowerCase();
-      const escale = (collab?.escale || '').toLowerCase();
-      const poste = (collab?.poste || '').toLowerCase();
-      const service = (collab?.service || '').toLowerCase();
-      const matricule = (collab?.matricule || '').toLowerCase();
-      const phone = (collab?.phone || '').toLowerCase();
-      const email = (collab?.email || '').toLowerCase();
+      const escale = (rec.escale || collab?.escale || '').toLowerCase();
+      const poste = (rec.poste || collab?.poste || '').toLowerCase();
+      const service = (rec.service || collab?.service || '').toLowerCase();
+      const matricule = (rec.matricule || collab?.matricule || '').toLowerCase();
+      const phone = (rec.phone || collab?.phone || '').toLowerCase();
+      const email = (rec.email || collab?.email || '').toLowerCase();
 
       return nom.includes(q) ||
              prenom.includes(q) ||
@@ -310,7 +343,7 @@ export default function RecruitmentApp({
              phone.includes(q) ||
              email.includes(q);
     });
-  }, [recruitments, collaborators, searchQuery, selectedEscale, filterStartDate, filterEndDate]);
+  }, [uniqueRecruitments, collaborators, searchQuery, selectedEscale, filterStartDate, filterEndDate]);
 
   // Split into active and archived
   const activeRecruitments = useMemo(() => {
@@ -338,8 +371,8 @@ export default function RecruitmentApp({
   }, [collaborators, collabSearchQuery]);
 
   const handleSendInscriptionEmail = (rec: RecruitmentRecord) => {
-    const collab = collaborators.find(c => c.id === rec.collaboratorId);
-    const emailDest = collab?.email || '';
+    const collab = getCollabForRecord(rec);
+    const emailDest = rec.email || collab?.email || '';
     const prenom = collab?.firstName || rec.collaboratorName?.split(' ')[0] || 'Candidat';
 
     if (!emailDest) {
@@ -392,8 +425,8 @@ Nous avons hâte de vous compter parmi nous !`;
   };
 
   const handleSendLivretAccueilEmail = (rec: RecruitmentRecord) => {
-    const collab = collaborators.find(c => c.id === rec.collaboratorId);
-    const emailDest = collab?.email || '';
+    const collab = getCollabForRecord(rec);
+    const emailDest = rec.email || collab?.email || '';
     const prenom = collab?.firstName || rec.collaboratorName?.split(' ')[0] || 'Candidat';
 
     if (!emailDest) {
@@ -428,7 +461,10 @@ Toute l’équipe Hubjob reste à votre disposition si vous avez la moindre ques
   const handleBulkInscriptionEmail = () => {
     const currentDisplayed = activeTab === 'active' ? activeRecruitments : archivedRecruitments;
     const emailList = currentDisplayed
-      .map(rec => collaborators.find(c => c.id === rec.collaboratorId)?.email || '')
+      .map(rec => {
+        const collab = getCollabForRecord(rec);
+        return rec.email || collab?.email || '';
+      })
       .filter(email => email.trim() !== '');
 
     if (emailList.length === 0) {
@@ -731,6 +767,12 @@ Nous avons hâte de vous compter parmi nous !`;
     const newRecordData: Omit<RecruitmentRecord, 'id' | 'createdAt' | 'updatedAt'> = {
       collaboratorId: collab.id,
       collaboratorName: `${collab.firstName} ${collab.lastName.toUpperCase()}`,
+      escale: collab.escale,
+      service: collab.service,
+      poste: collab.poste,
+      phone: collab.phone,
+      email: collab.email,
+      matricule: collab.matricule,
       recruteur: '',
       dateEntretien: '',
       dateIntegrationPrevue: '',
@@ -747,51 +789,66 @@ Nous avons hâte de vous compter parmi nous !`;
   // Handle create new collaborator + start recruitment
   const handleCreateNewCollaboratorAndRecruit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingNewCollab) return;
     if (!newCollabData.firstName.trim() || !newCollabData.lastName.trim()) {
       setFormError('Veuillez renseigner au moins le prénom et le nom.');
       return;
     }
     setFormError(null);
+    setIsSubmittingNewCollab(true);
 
-    const createdCollab = await onAddCollaborator({
-      firstName: newCollabData.firstName.trim(),
-      lastName: newCollabData.lastName.trim().toUpperCase(),
-      email: newCollabData.email.trim(),
-      phone: newCollabData.phone.trim(),
-      escale: newCollabData.escale,
-      service: newCollabData.service,
-      poste: newCollabData.poste.trim(),
-      coefficient: newCollabData.coefficient.trim(),
-      matricule: newCollabData.matricule.trim()
-    });
-
-    if (createdCollab) {
-      const newRecordData: Omit<RecruitmentRecord, 'id' | 'createdAt' | 'updatedAt'> = {
-        collaboratorId: createdCollab.id,
-        collaboratorName: `${createdCollab.firstName} ${createdCollab.lastName.toUpperCase()}`,
-        recruteur: '',
-        dateEntretien: '',
-        dateIntegrationPrevue: '',
-        checklist: { ...DEFAULT_CHECKLIST },
-        commentaires: '',
-        status: 'en_cours'
-      };
-
-      onAddRecruitment(newRecordData);
-      setIsNewCollabModalOpen(false);
-      setNewCollabData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        escale: ESCALES[0] || 'BOD',
-        service: SERVICES[0] || 'PISTE',
-        poste: '',
-        coefficient: '',
-        matricule: ''
+    try {
+      const createdCollab = await onAddCollaborator({
+        firstName: newCollabData.firstName.trim(),
+        lastName: newCollabData.lastName.trim().toUpperCase(),
+        email: newCollabData.email.trim(),
+        phone: newCollabData.phone.trim(),
+        escale: newCollabData.escale,
+        service: newCollabData.service,
+        poste: newCollabData.poste.trim(),
+        coefficient: newCollabData.coefficient.trim(),
+        matricule: newCollabData.matricule.trim()
       });
-      setActiveTab('active');
-      showToast(`Intérimaire ${createdCollab.firstName} ${createdCollab.lastName} ajouté et fiche de recrutement ouverte !`, 'success');
+
+      if (createdCollab) {
+        const newRecordData: Omit<RecruitmentRecord, 'id' | 'createdAt' | 'updatedAt'> = {
+          collaboratorId: createdCollab.id,
+          collaboratorName: `${createdCollab.firstName} ${createdCollab.lastName.toUpperCase()}`,
+          escale: createdCollab.escale,
+          service: createdCollab.service,
+          poste: createdCollab.poste,
+          phone: createdCollab.phone,
+          email: createdCollab.email,
+          matricule: createdCollab.matricule,
+          recruteur: '',
+          dateEntretien: '',
+          dateIntegrationPrevue: '',
+          checklist: { ...DEFAULT_CHECKLIST },
+          commentaires: '',
+          status: 'en_cours'
+        };
+
+        onAddRecruitment(newRecordData);
+        setIsNewCollabModalOpen(false);
+        setNewCollabData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          escale: ESCALES[0] || 'BOD',
+          service: SERVICES[0] || 'PISTE',
+          poste: '',
+          coefficient: '',
+          matricule: ''
+        });
+        setActiveTab('active');
+        showToast(`Intérimaire ${createdCollab.firstName} ${createdCollab.lastName} ajouté et fiche de recrutement ouverte !`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Une erreur est survenue lors de la création du collaborateur.', 'warning');
+    } finally {
+      setIsSubmittingNewCollab(false);
     }
   };
 
@@ -1172,14 +1229,14 @@ Nous avons hâte de vous compter parmi nous !`;
               </div>
             ) : (
               activeRecruitments.map(rec => {
-                const collab = collaborators.find(c => c.id === rec.collaboratorId);
-                const displayName = collab ? `${collab.firstName} ${collab.lastName.toUpperCase()}` : (rec.collaboratorName || 'Collaborateur');
-                const escale = collab?.escale || 'BOD';
-                const service = collab?.service || 'PISTE';
-                const poste = collab?.poste || 'Non renseigné';
-                const phone = collab?.phone;
-                const email = collab?.email;
-                const matricule = collab?.matricule;
+                const collab = getCollabForRecord(rec);
+                const displayName = (collab ? `${collab.firstName} ${collab.lastName.toUpperCase()}` : rec.collaboratorName) || 'Collaborateur';
+                const escale = rec.escale || collab?.escale || 'BOD';
+                const service = rec.service || collab?.service || 'PISTE';
+                const poste = rec.poste || collab?.poste || 'Non renseigné';
+                const phone = rec.phone || collab?.phone;
+                const email = rec.email || collab?.email;
+                const matricule = rec.matricule || collab?.matricule;
 
                 // Count Oui, Non, N/A
                 const countOui = Object.values(rec.checklist).filter(v => {
@@ -1664,9 +1721,13 @@ Nous avons hâte de vous compter parmi nous !`;
                 </div>
 
                 {archivedRecruitments.map(rec => {
-                  const collab = collaborators.find(c => c.id === rec.collaboratorId);
+                  const collab = getCollabForRecord(rec);
                   const isMiseEnPoste = rec.status === 'mise_en_poste';
                   const isExpanded = expandedCardIds.has(rec.id);
+                  const displayName = (collab ? `${collab.firstName} ${collab.lastName.toUpperCase()}` : rec.collaboratorName) || 'Collaborateur';
+                  const escale = rec.escale || collab?.escale || 'BOD';
+                  const service = rec.service || collab?.service || 'PISTE';
+                  const poste = rec.poste || collab?.poste || '';
 
                   return (
                     <div 
@@ -1690,7 +1751,7 @@ Nous avons hâte de vous compter parmi nous !`;
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="font-black text-white text-base">
-                                {collab ? `${collab.firstName} ${collab.lastName.toUpperCase()}` : (rec.collaboratorName || 'Collaborateur')}
+                                {displayName}
                               </h4>
                               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                                 isMiseEnPoste ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' : 'bg-rose-500/20 text-rose-300 border border-rose-400/30'
@@ -1699,7 +1760,7 @@ Nous avons hâte de vous compter parmi nous !`;
                               </span>
                             </div>
                             <p className="text-xs text-slate-400 mt-0.5">
-                              {collab?.escale} • {collab?.service} {collab?.poste ? `• ${collab.poste}` : ''}
+                              {escale} • {service} {poste ? `• ${poste}` : ''}
                             </p>
                           </div>
                         </div>
@@ -2298,10 +2359,20 @@ Nous avons hâte de vous compter parmi nous !`;
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                  disabled={isSubmittingNewCollab}
+                  className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <UserPlus className="h-4 w-4" />
-                  Créer et Lancer le Recrutement
+                  {isSubmittingNewCollab ? (
+                    <>
+                      <RotateCw className="h-4 w-4 animate-spin" />
+                      <span>Création en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4" />
+                      <span>Créer et Lancer le Recrutement</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

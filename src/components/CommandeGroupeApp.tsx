@@ -414,6 +414,13 @@ export default function CommandeGroupeApp({
           if (updates.resultat === 'retenu') merged.statut = 'retenu';
           else if (updates.resultat === 'non_retenu') merged.statut = 'non_retenu';
           else if (updates.resultat === 'noshow') merged.statut = 'noshow';
+          else if (updates.resultat === 'recu') merged.statut = 'recu';
+        }
+        if (updates.statut !== undefined) {
+          if (updates.statut === 'retenu') merged.resultat = 'retenu';
+          else if (updates.statut === 'non_retenu') merged.resultat = 'non_retenu';
+          else if (updates.statut === 'noshow') merged.resultat = 'noshow';
+          else if (updates.statut === 'recu') merged.resultat = 'recu';
         }
         return merged;
       }
@@ -672,7 +679,7 @@ export default function CommandeGroupeApp({
         if (c.statut !== candidatesStatusFilter) return false;
       }
 
-      if (candidatesStatusFilter === 'retenu' && preResultFilter !== 'all') {
+      if (candidatesStatusFilter === 'recu' && preResultFilter !== 'all') {
         if (c.pre_resultat !== preResultFilter) return false;
       }
 
@@ -2030,12 +2037,13 @@ export default function CommandeGroupeApp({
 
                       {/* Status Filter Buttons */}
                       <div className="flex flex-wrap items-center gap-1 bg-slate-200/55 p-0.5 rounded-lg border border-slate-200">
-                        {(['all', 'en_cours', 'convoque', 'retenu', 'non_retenu', 'noshow'] as const).map((stat) => {
+                        {(['all', 'en_cours', 'convoque', 'recu', 'noshow', 'retenu', 'non_retenu'] as const).map((stat) => {
                           const label = stat === 'all' ? 'Tous' :
                                         stat === 'en_cours' ? 'En cours' :
                                         stat === 'convoque' ? 'Convoqué' :
-                                        stat === 'retenu' ? 'Retenu' :
-                                        stat === 'non_retenu' ? 'Non retenu' : 'Noshow';
+                                        stat === 'recu' ? 'Reçu' :
+                                        stat === 'noshow' ? 'NoShow' :
+                                        stat === 'retenu' ? 'Retenu' : 'Non retenu';
                           const active = candidatesStatusFilter === stat;
                           return (
                             <button
@@ -2054,8 +2062,8 @@ export default function CommandeGroupeApp({
                         })}
                       </div>
 
-                      {/* Sub-filter by evaluation score for Retenu */}
-                      {candidatesStatusFilter === 'retenu' && (
+                      {/* Sub-filter by evaluation score for Recu */}
+                      {candidatesStatusFilter === 'recu' && (
                         <div className="flex items-center gap-1.5 animate-fade-in pl-2 border-l border-slate-200">
                           <span className="text-[10px] font-extrabold text-slate-450 uppercase tracking-wider shrink-0">Score :</span>
                           <div className="flex items-center gap-0.5 bg-slate-200/55 p-0.5 rounded-lg border border-slate-200">

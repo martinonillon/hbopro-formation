@@ -150,7 +150,7 @@ export interface GroupOrderCandidate {
   service: string;
   poste: string;
   enregistre_le: string;
-  statut: 'en_cours' | 'convoque' | 'retenu' | 'non_retenu' | 'noshow';
+  statut: 'en_cours' | 'convoque' | 'recu' | 'retenu' | 'non_retenu' | 'noshow';
 
   // Section 1
   recruteur_prequal?: string;
@@ -228,6 +228,12 @@ export interface RecruitmentRecord {
   id: string;
   collaboratorId: string;
   collaboratorName?: string;
+  escale?: string;
+  service?: string;
+  poste?: string;
+  phone?: string;
+  email?: string;
+  matricule?: string;
   recruteur: string;
   dateEntretien: string;
   dateIntegrationPrevue: string;

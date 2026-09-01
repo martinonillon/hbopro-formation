@@ -137,11 +137,14 @@ export default function App() {
   const handleAddRecruitment = (recData: Omit<RecruitmentRecord, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newRecord: RecruitmentRecord = {
       ...recData,
-      id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      id: `rec-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    setRecruitments(prev => [newRecord, ...prev]);
+    setRecruitments(prev => {
+      const filtered = prev.filter(r => r.id !== newRecord.id);
+      return [newRecord, ...filtered];
+    });
     saveItemToFirestore('recruitments', newRecord);
     saveToSupabase('recruitments', newRecord, handleSupabaseWriteError);
     addEvent(`Nouvelle fiche de recrutement créée pour ${newRecord.collaboratorName}`, 'success');
@@ -628,8 +631,18 @@ export default function App() {
       setSupabaseError(errMsg);
     };
 
+    const dedupeById = <T extends { id: string }>(items: T[]): T[] => {
+      const map = new Map<string, T>();
+      for (const item of items) {
+        if (item && item.id) {
+          map.set(item.id, item);
+        }
+      }
+      return Array.from(map.values());
+    };
+
     // Supabase Real-time subscriptions
-    const unsubSupaCollabs = syncSupabaseTable('collaborators', setCollaborators, [], handleSyncError);
+    const unsubSupaCollabs = syncSupabaseTable('collaborators', (data: Collaborator[]) => setCollaborators(dedupeById(data)), [], handleSyncError);
     const unsubSupaLogs = syncSupabaseTable('training_logs', (data: TrainingLog[]) => {
       const { uniqueLogs } = deduplicateTrainingLogs(data);
       setTrainingLogs(uniqueLogs.map(l => ({
@@ -642,11 +655,11 @@ export default function App() {
     const unsubSupaUsers = syncSupabaseTable('users', setUsers, [], handleSyncError);
     const unsubSupaContacts = syncSupabaseTable('contacts', setContacts, [], handleSyncError);
     const unsubSupaRegistrationReqs = syncSupabaseTable('registration_requests', setRegistrationRequests, [], handleSyncError);
-    const unsubSupaRecruitments = syncSupabaseTable('recruitments', setRecruitments, [], handleSyncError);
+    const unsubSupaRecruitments = syncSupabaseTable('recruitments', (data: RecruitmentRecord[]) => setRecruitments(dedupeById(data)), [], handleSyncError);
     const unsubSupaCommandes = syncSupabaseTable('commandes_groupe', setCommandes, [], handleSyncError);
 
     // Fallback Firestore real-time sync
-    const unsubCollabs = syncCollection('collaborators', setCollaborators, []);
+    const unsubCollabs = syncCollection('collaborators', (data: Collaborator[]) => setCollaborators(dedupeById(data)), []);
     const unsubLogs = syncCollection('training_logs', (data: TrainingLog[]) => {
       const { uniqueLogs } = deduplicateTrainingLogs(data);
       setTrainingLogs(uniqueLogs.map(l => ({
@@ -659,7 +672,7 @@ export default function App() {
     const unsubUsers = syncCollection('users', setUsers, []);
     const unsubContacts = syncCollection('contacts', setContacts, []);
     const unsubRegistrationReqs = syncCollection('registration_requests', setRegistrationRequests, []);
-    const unsubRecruitments = syncCollection('recruitments', setRecruitments, []);
+    const unsubRecruitments = syncCollection('recruitments', (data: RecruitmentRecord[]) => setRecruitments(dedupeById(data)), []);
     const unsubCommandes = syncCollection('commandes_groupe', setCommandes, []);
 
     return () => {
@@ -745,13 +758,16 @@ export default function App() {
 
   // Handler: Add Collaborator
   const handleAddCollaborator = (collabData: Omit<Collaborator, 'id'>): Collaborator => {
-    const newId = 'c' + (collaborators.length + 1);
+    const newId = `c-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const newCollab: Collaborator = {
       ...collabData,
       id: newId,
       avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?w=150&auto=format&fit=crop&q=80`
     };
-    setCollaborators(prev => [...prev, newCollab]);
+    setCollaborators(prev => {
+      const filtered = prev.filter(c => c.id !== newId);
+      return [...filtered, newCollab];
+    });
     saveItemToFirestore('collaborators', newCollab);
     saveToSupabase('collaborators', newCollab, handleSupabaseWriteError);
     addEvent(`Collaborateur ajouté : ${newCollab.firstName} ${newCollab.lastName} (${newCollab.escale})`, 'success');
@@ -848,8 +864,9 @@ export default function App() {
       return;
     }
 
+    const newId = `l-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const newLog: TrainingLog = {
-      id: 'l' + (trainingLogs.length + 1),
+      id: newId,
       collaboratorId: collabId,
       collaboratorName: `${collab.firstName} ${collab.lastName}`,
       moduleName,

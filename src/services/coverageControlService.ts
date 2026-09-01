@@ -3,19 +3,14 @@ import * as XLSX from 'xlsx';
 // ---- Liste des représentants (colonne REPRES_CH) à prendre en compte pour ORLY ----
 export const REPRES_ORLY_A_GARDER = [
   "AXIA PINEAU",
-  "BARBOSA José",
   "BERTHOU ANDREA",
-  "DAVID DAVID",
-  "DEBAS JACQUES",
   "DRAME Stéphane",
+  "IDDIR RAFIK",
   "MAILLOT Christophe",
-  "MAS LAURE",
-  "MILANOVIC Dejan",
   "MOHAMED David",
   "PINEAU AXIA",
-  "PUCH KARINE",
-  "ROUSSEL CHRISTINE",
-  "TRUILHE Florent",
+  "RAFIK IDDIR",
+  "ROSA Ulysses",
   "ZEBBOUDJ Sisan",
 ].map(s => s.trim().toLowerCase());
 
@@ -203,6 +198,7 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
   const colsP = Object.keys(rowsP[0]);
 
   const colCMat = colsC.includes('sal_ch') ? 'sal_ch' : findCol(colsC, ['sal_', 'matricule']);
+  const colCIdSa = colsC.includes('id_sa') ? 'id_sa' : findCol(colsC, ['id_sa']);
   const colCDeb = findCol(colsC, ['date_d', 'debut']);
   const colCFin = findCol(colsC, ['date_f', 'fin']);
   const colCRepres = colsC.includes('repres_ch') ? 'repres_ch' : findCol(colsC, ['repres']);
@@ -234,11 +230,14 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
   // ---- Préparation des contrats ----
   const contrats = rowsC.map(r => ({
     mat: formatMat(r[colCMat]),
+    matAlt: colCIdSa ? formatMat(r[colCIdSa]) : "",
     dtDeb: parseDate(r[colCDeb]),
     dtFin: parseDate(r[colCFin]),
   }));
 
-  const matsContrats = new Set(contrats.map(c => c.mat).filter(m => m !== ""));
+  const matsContrats = new Set(
+    contrats.flatMap(c => [c.mat, c.matAlt]).filter(m => m !== "")
+  );
 
   // ---- Préparation du planning ----
   let nbSansMatricule = 0;
@@ -294,7 +293,7 @@ export function controleCouvertureOrly(bufferContrats: Buffer | Uint8Array, buff
   for (const p of planning) {
     if (!p.dateVac || !p.mat) continue;
 
-    const sousContrats = contrats.filter(c => c.mat === p.mat);
+    const sousContrats = contrats.filter(c => c.mat === p.mat || c.matAlt === p.mat);
     const couvert = sousContrats.some(c =>
       c.dtDeb && c.dtFin && sameOrBetween(p.dateVac!, c.dtDeb!, c.dtFin!)
     );
