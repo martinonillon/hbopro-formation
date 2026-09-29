@@ -222,7 +222,7 @@ export interface RecruitmentChecklist {
   miseAuxNormesDossierRh?: ChecklistItemType;
 }
 
-export type RecruitmentStatus = 'en_cours' | 'mise_en_poste' | 'annule';
+export type RecruitmentStatus = 'en_cours' | 'en_formation' | 'mise_en_poste' | 'annule';
 
 export interface RecruitmentRecord {
   id: string;

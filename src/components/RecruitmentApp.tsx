@@ -116,8 +116,8 @@ export default function RecruitmentApp({
   isReadOnly = false,
   onOpenModeOp
 }: RecruitmentAppProps) {
-  // Tabs: 'active' (En cours) or 'archived' (Mise en poste / Annulés)
-  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  // Tabs: 'active' (En cours), 'en_formation' (En formation), or 'archived' (Mise en poste / Annulés)
+  const [activeTab, setActiveTab] = useState<'active' | 'en_formation' | 'archived'>('active');
 
   // Track expanded cards (default is empty = all collapsed)
   const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
@@ -277,17 +277,19 @@ export default function RecruitmentApp({
   }, [recruitments]);
 
   // Count of "en_cours" dossiers for each escale
+  // Count of dossiers for each escale based on active tab
   const escaleCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     uniqueRecruitments.forEach(rec => {
-      if (rec.status === 'en_cours') {
+      const targetStatus = activeTab === 'en_formation' ? 'en_formation' : activeTab === 'active' ? 'en_cours' : null;
+      if (!targetStatus || rec.status === targetStatus) {
         const collab = getCollabForRecord(rec);
         const escale = rec.escale || collab?.escale || 'BOD';
         counts[escale] = (counts[escale] || 0) + 1;
       }
     });
     return counts;
-  }, [uniqueRecruitments, collaborators]);
+  }, [uniqueRecruitments, collaborators, activeTab]);
 
   // Filtered recruitments based on global search query, selected escale and creation date range
   const filteredRecruitments = useMemo(() => {
@@ -345,9 +347,13 @@ export default function RecruitmentApp({
     });
   }, [uniqueRecruitments, collaborators, searchQuery, selectedEscale, filterStartDate, filterEndDate]);
 
-  // Split into active and archived
+  // Split into active, en_formation and archived
   const activeRecruitments = useMemo(() => {
     return filteredRecruitments.filter(r => r.status === 'en_cours');
+  }, [filteredRecruitments]);
+
+  const formationRecruitments = useMemo(() => {
+    return filteredRecruitments.filter(r => r.status === 'en_formation');
   }, [filteredRecruitments]);
 
   const archivedRecruitments = useMemo(() => {
@@ -940,6 +946,12 @@ Nous avons hâte de vous compter parmi nous !`;
         archivedAt: new Date().toISOString()
       });
       showToast(`Recrutement annulé et consigné dans la fiche de ${rec.collaboratorName || 'l’intérimaire'}.`, 'warning');
+    } else if (newStatus === 'en_formation') {
+      onUpdateRecruitment(rec.id, {
+        status: 'en_formation',
+        archivedAt: undefined
+      });
+      showToast(`Statut mis à jour : En formation pour ${rec.collaboratorName || 'l’intérimaire'}.`, 'success');
     } else {
       // Re-open to En cours
       onUpdateRecruitment(rec.id, {
@@ -1030,6 +1042,12 @@ Nous avons hâte de vous compter parmi nous !`;
                     {recruitments.filter(r => r.status === 'annule').length}
                   </span>
                 </div>
+                <div className="bg-white/10 backdrop-blur-xs border border-white/15 px-3.5 py-2 rounded-xl text-center min-w-[80px]">
+                  <span className="text-[10px] uppercase font-bold text-pink-300 block">En formation</span>
+                  <span className="text-lg font-black text-white">
+                    {uniqueRecruitments.filter(r => r.status === 'en_formation').length}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1077,7 +1095,7 @@ Nous avons hâte de vous compter parmi nous !`;
               <span>Envoi mail d'inscription</span>
             </button>
 
-            {/* Tab switch : En cours vs Archivés */}
+            {/* Tab switch : En cours vs En formation vs Archivés */}
             <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 text-xs font-bold">
               <button
                 type="button"
@@ -1090,6 +1108,18 @@ Nous avons hâte de vous compter parmi nous !`;
               >
                 <Clock className="h-3.5 w-3.5 text-amber-600" />
                 <span>En cours ({activeRecruitments.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('en_formation')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'en_formation'
+                    ? 'bg-white text-pink-700 shadow-xs ring-1 ring-pink-300'
+                    : 'text-slate-600 hover:text-pink-700'
+                }`}
+              >
+                <GraduationCap className="h-3.5 w-3.5 text-pink-600" />
+                <span>En formation ({formationRecruitments.length})</span>
               </button>
               <button
                 type="button"
@@ -1277,11 +1307,14 @@ Nous avons hâte de vous compter parmi nous !`;
                               ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
                               : rec.status === 'annule'
                               ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                              : rec.status === 'en_formation'
+                              ? 'bg-pink-500/20 text-pink-400 border-pink-500/40'
                               : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                           }`}
                           title={
                             rec.status === 'mise_en_poste' ? 'Statut : Mise en poste' :
                             rec.status === 'annule' ? 'Statut : Annulé' :
+                            rec.status === 'en_formation' ? 'Statut : En formation' :
                             'Statut : En cours'
                           }
                         >
@@ -1289,6 +1322,8 @@ Nous avons hâte de vous compter parmi nous !`;
                             <CheckCircle2 className="h-5 w-5" />
                           ) : rec.status === 'annule' ? (
                             <XCircle className="h-5 w-5" />
+                          ) : rec.status === 'en_formation' ? (
+                            <GraduationCap className="h-5 w-5" />
                           ) : (
                             <Clock className="h-5 w-5" />
                           )}
@@ -1655,6 +1690,22 @@ Nous avons hâte de vous compter parmi nous !`;
                                 <span>Mise en poste</span>
                               </button>
 
+                              {/* 2. Bouton Rose ("En formation") */}
+                              <button
+                                type="button"
+                                onClick={() => handleStatusChange(rec, 'en_formation')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 ${
+                                  rec.status === 'en_formation'
+                                    ? 'bg-pink-600 text-white ring-2 ring-pink-400 ring-offset-1'
+                                    : 'bg-pink-50 hover:bg-pink-600 text-pink-700 hover:text-white border border-pink-300'
+                                }`}
+                                title="Passer en formation"
+                                id={`recruitment-btn-formation-${rec.id}`}
+                              >
+                                <GraduationCap className="h-4 w-4" />
+                                <span>En formation</span>
+                              </button>
+
                               {/* 2. Bouton Horloge Orange ("En cours") */}
                               <button
                                 type="button"
@@ -1687,6 +1738,343 @@ Nous avons hâte de vous compter parmi nous !`;
                                 <span>Annuler</span>
                               </button>
 
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </>
+        )}
+
+        {/* VUE EN FORMATION */}
+        {activeTab === 'en_formation' && (
+          <>
+            {formationRecruitments.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-4">
+                <div className="w-14 h-14 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center mx-auto border border-pink-100">
+                  <GraduationCap className="h-7 w-7" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-slate-800">Aucun recrutement en formation</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Aucun agent n'est actuellement au statut <strong>"En formation"</strong>.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              formationRecruitments.map(rec => {
+                const collab = getCollabForRecord(rec);
+                const displayName = (collab ? `${collab.firstName} ${collab.lastName.toUpperCase()}` : rec.collaboratorName) || 'Collaborateur';
+                const escale = rec.escale || collab?.escale || 'BOD';
+                const service = rec.service || collab?.service || 'PISTE';
+                const poste = rec.poste || collab?.poste || 'Non renseigné';
+                const phone = rec.phone || collab?.phone;
+                const email = rec.email || collab?.email;
+                const matricule = rec.matricule || collab?.matricule;
+
+                // Count Oui, Non, N/A
+                const countOui = Object.values(rec.checklist).filter(v => {
+                  if (typeof v === 'string') return v === 'Oui';
+                  if (typeof v === 'object' && v !== null) return (v as any).value === 'Oui';
+                  return false;
+                }).length;
+                const countTotal = ENTRETIEN_FIELDS.length + INTEGRATION_FIELDS.length;
+                const percentDone = Math.round((countOui / countTotal) * 100);
+                const isExpanded = expandedCardIds.has(rec.id);
+
+                const getChecklistVal = (key: keyof RecruitmentChecklist) => {
+                  const raw = rec.checklist[key];
+                  if (typeof raw === 'object' && raw !== null) {
+                    return raw.value || 'N/A';
+                  }
+                  return raw || 'N/A';
+                };
+
+                return (
+                  <div 
+                    key={rec.id}
+                    className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden transition-all hover:border-pink-300"
+                    id={`recruitment-card-${rec.id}`}
+                  >
+                    {/* Bandeau noir d'information de l'agent */}
+                    <div 
+                      onClick={() => toggleCardExpansion(rec.id)}
+                      className="bg-slate-900 hover:bg-slate-850 text-white p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3.5 cursor-pointer select-none transition-colors"
+                      title={isExpanded ? "Cliquer pour masquer les détails" : "Cliquer pour afficher les détails du recrutement"}
+                    >
+                      
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        {/* Statut : Rond et Icône du statut */}
+                        <div 
+                          className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 border shadow-xs transition-transform bg-pink-500/20 text-pink-400 border-pink-500/40"
+                          title="Statut : En formation"
+                        >
+                          <GraduationCap className="h-5 w-5" />
+                        </div>
+
+                        {/* Identité & Métier */}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base font-black text-white tracking-tight truncate">
+                              {displayName}
+                            </h3>
+                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-400/30 rounded-md font-mono font-bold text-xs">
+                              {escale}
+                            </span>
+                            <span className="px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-md font-semibold text-xs">
+                              {service}
+                            </span>
+                            <span className="px-2 py-0.5 bg-pink-500/20 text-pink-300 border border-pink-400/30 rounded-md font-semibold text-xs">
+                              {poste}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 flex-wrap">
+                            {matricule && <span>Matricule: <strong className="text-slate-200 font-mono">{matricule}</strong></span>}
+                            {phone && (
+                              <span className="flex items-center gap-1 text-slate-300">
+                                <Phone className="h-3 w-3 text-emerald-400" /> {phone}
+                              </span>
+                            )}
+                            {email && (
+                              <span className="flex items-center gap-1 text-slate-300">
+                                <Mail className="h-3 w-3 text-blue-400" /> {email}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Progression, Actions & Chevron */}
+                      <div className="flex items-center gap-2.5 self-end md:self-auto shrink-0">
+                        <div className="flex flex-col items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('mailInscription') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('mailInscription') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Mail d'inscription">
+                                <Mail className="h-3.5 w-3.5" />
+                              </div>
+                            </div>
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('fichePlanete') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('fichePlanete') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Fiche Planete">
+                                <Globe className="h-3.5 w-3.5" />
+                              </div>
+                            </div>
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('ficheHbo') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('ficheHbo') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Fiche HBO">
+                                <Fingerprint className="h-3.5 w-3.5" />
+                              </div>
+                            </div>
+                            <div className="group relative">
+                              <div className={`p-1.5 rounded-lg border transition-all ${
+                                getChecklistVal('demandeTca') === 'Oui' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                getChecklistVal('demandeTca') === 'Non' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                'bg-slate-850 text-slate-500 border-slate-700'
+                              }`} title="Demande de TCA">
+                                <IdCard className="h-3.5 w-3.5" />
+                              </div>
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">
+                            Enregistré le : {formatDateFR(rec.createdAt)}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-800/90 border border-slate-700 px-2.5 py-1 rounded-xl flex items-center gap-2">
+                          <div className="text-right">
+                            <span className="text-[9px] text-slate-400 font-bold block uppercase leading-tight">Conformité</span>
+                            <span className="text-[11px] font-black text-emerald-400 font-mono leading-tight">{countOui}/{countTotal} ({percentDone}%)</span>
+                          </div>
+                          <div className="w-8 bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                            <div className="bg-emerald-500 h-full transition-all" style={{ width: `${percentDone}%` }} />
+                          </div>
+                        </div>
+
+                        {onViewCollaboratorProfile && collab && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onViewCollaboratorProfile(collab.id);
+                            }}
+                            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition-colors cursor-pointer"
+                            title="Voir la fiche complète dans la Base Intérimaires"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRecruitmentToDelete(rec);
+                            }}
+                            className="p-2 bg-rose-500/10 hover:bg-rose-500 text-rose-300 hover:text-white rounded-xl border border-rose-500/30 transition-colors cursor-pointer"
+                            title="Supprimer cette fiche de recrutement"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        <div className="p-2 bg-slate-800 text-slate-300 rounded-xl border border-slate-700">
+                          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-pink-400' : 'text-slate-400'}`} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Corps de la carte (Déployé) */}
+                    {isExpanded && (
+                      <div className="p-4 sm:p-5 space-y-4 border-t border-slate-100 bg-white">
+                        <div className="bg-slate-50/90 rounded-xl p-3.5 border border-slate-200/80 grid grid-cols-1 sm:grid-cols-5 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Recruteur</label>
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              value={rec.recruteur}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { recruteur: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Date pré-qual</label>
+                            <input
+                              type="date"
+                              disabled={isReadOnly}
+                              value={rec.datePreQual || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { datePreQual: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Date entretien</label>
+                            <input
+                              type="date"
+                              disabled={isReadOnly}
+                              value={rec.dateEntretien || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { dateEntretien: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Date dispo</label>
+                            <input
+                              type="date"
+                              disabled={isReadOnly}
+                              value={rec.dateDisponibilite || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { dateDisponibilite: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Date intégration</label>
+                            <input
+                              type="date"
+                              disabled={isReadOnly}
+                              value={rec.dateIntegrationPrevue || ''}
+                              onChange={(e) => onUpdateRecruitment(rec.id, { dateIntegrationPrevue: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-6">
+                          <div className="border-b border-slate-100 pb-4">
+                            <h4 className="text-sm font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5 mb-3">
+                              Section 1 : Pré-qualification téléphonique
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <textarea
+                                disabled={isReadOnly}
+                                rows={2}
+                                value={rec.compteRenduEchange || ''}
+                                onChange={(e) => onUpdateRecruitment(rec.id, { compteRenduEchange: e.target.value })}
+                                placeholder="Compte rendu..."
+                                className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                              />
+                              <textarea
+                                disabled={isReadOnly}
+                                rows={2}
+                                value={rec.pointsAlerte || ''}
+                                onChange={(e) => onUpdateRecruitment(rec.id, { pointsAlerte: e.target.value })}
+                                placeholder="Points d'alerte..."
+                                className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          <h4 className="text-sm font-black uppercase tracking-wider text-purple-700 mb-2">Section 2 : Entretien</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {ENTRETIEN_FIELDS.map(field => renderChecklistItem(field, rec))}
+                          </div>
+
+                          <div className="border-t border-slate-200 pt-4">
+                            <h4 className="text-sm font-black uppercase tracking-wider text-emerald-700 mb-2">Section 3 : Intégration</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {INTEGRATION_FIELDS.map(field => renderChecklistItem(field, rec))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status buttons */}
+                        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                          <div className="text-[11px] text-slate-400 italic">Changement de statut instantané.</div>
+                          {!isReadOnly && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => handleTriggerMiseEnPoste(rec)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 ${
+                                  rec.status === 'mise_en_poste' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-300'
+                                }`}
+                              >
+                                <CheckCircle2 className="h-4 w-4" /> Mise en poste
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStatusChange(rec, 'en_formation')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 ${
+                                  rec.status === 'en_formation' ? 'bg-pink-600 text-white ring-2 ring-pink-400 ring-offset-1' : 'bg-pink-50 hover:bg-pink-600 text-pink-700 hover:text-white border border-pink-300'
+                                }`}
+                              >
+                                <GraduationCap className="h-4 w-4" /> En formation
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStatusChange(rec, 'en_cours')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 ${
+                                  rec.status === 'en_cours' ? 'bg-amber-500 text-white' : 'bg-amber-50 hover:bg-amber-500 text-amber-800 hover:text-white border border-amber-300'
+                                }`}
+                              >
+                                <Clock className="h-4 w-4" /> En cours
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleStatusChange(rec, 'annule')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 ${
+                                  rec.status === 'annule' ? 'bg-rose-600 text-white' : 'bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-300'
+                                }`}
+                              >
+                                <XCircle className="h-4 w-4" /> Annuler
+                              </button>
                             </div>
                           )}
                         </div>
